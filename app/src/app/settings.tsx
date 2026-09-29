@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Reveal } from "../components/motion";
 import { Button, Field, Row, SectionTitle } from "../components/ui";
@@ -22,6 +22,27 @@ export default function SettingsScreen() {
   const [spotSeconds, setSpotSeconds] = useState(String(settings.spotRefreshSeconds));
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [aiKey, setAiKey] = useState("");
+
+  useEffect(() => {
+    createApi(settings).health().then(setHealth).catch(() => {});
+  }, [settings]);
+
+  const saveKey = async () => {
+    setBusy("key");
+    try {
+      await createApi(draft()).saveAiKey(aiKey.trim());
+      setAiKey("");
+      setHealth(await createApi(draft()).health());
+      haptic.success();
+      notify("Claude connected", "Identification and market research now use Claude.");
+    } catch (e) {
+      haptic.error();
+      notify("Key not saved", e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const draft = () => ({
     serverUrl: serverUrl.trim().replace(/\/+$/, ""),
@@ -63,7 +84,22 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      <SectionTitle>Movement</SectionTitle>
+      <SectionTitle>Claude · Best Accuracy</SectionTitle>
+      {health?.ai_provider === "claude" ? (
+        <Text style={[type.body, { color: colors.up }]}>Connected · {health.ai_model}</Text>
+      ) : (
+        <View style={{ gap: 14 }}>
+          <Text style={type.bodyMuted}>
+            Claude reads dates, mint marks, slabs and refiner hallmarks with expert accuracy in seconds, and researches
+            actual sold prices. About 2–5¢ per identification and 10–40¢ per market report, billed by Anthropic.
+          </Text>
+          <Button title="1 · Get a key" kind="secondary" onPress={() => Linking.openURL("https://console.anthropic.com/settings/keys")} />
+          <Field label="2 · Paste your key" value={aiKey} onChangeText={setAiKey} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="sk-ant-…" />
+          <Button title="3 · Save" onPress={saveKey} busy={busy === "key"} disabled={!aiKey.trim()} />
+        </View>
+      )}
+
+      <SectionTitle>Connection</SectionTitle>
       <View style={{ gap: 22 }}>
         <Field label="Server address" value={serverUrl} onChangeText={setServerUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://vault.example.com" />
         <Field label="Access token" value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false} secureTextEntry />

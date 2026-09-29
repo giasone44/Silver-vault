@@ -2,9 +2,27 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { BetaMessage, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { config } from "./config.js";
+import { MAKERS, type Maker } from "./makers.js";
 import { Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
 
-const client = new Anthropic();
+let client = new Anthropic();
+
+/** Switches to a new API key without restarting (set from the app's Settings screen). */
+export function useApiKey(apiKey: string) {
+  process.env.ANTHROPIC_API_KEY = apiKey;
+  client = new Anthropic({ apiKey });
+}
+
+/** Confirms a key works before it is saved. */
+export async function checkApiKey(apiKey: string): Promise<boolean> {
+  try {
+    await new Anthropic({ apiKey }).models.retrieve(config.claudeModel);
+    return true;
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) return false;
+    throw err;
+  }
+}
 
 // Opt into server-side fallbacks so a safety-classifier false positive is
 // retried on another model instead of failing the request.
@@ -29,7 +47,8 @@ Rules:
 - For graded slabs, transcribe the service, grade, and certification number exactly.
 - For raw coins, give an honest estimated grade range and describe visible condition issues.
 - Leave a field null rather than guessing when it cannot be determined, and say what photo would resolve it.
-- search_query should be what a dealer would type into eBay's sold listings to find this exact item (include year, mint mark, grade/slab where relevant).`;
+- Bars and rounds: identify the refiner or private mint from its name, logo and hallmark style, and record the serial number (in condition_notes) and style (poured, extruded, struck) - these drive collector value. Well-known makers include: ${MAKERS.map((m) => m.name).join(", ")}.
+- search_query should be what a dealer would type into eBay's sold listings to find this exact item (include year, mint mark, grade/slab, refiner and style where relevant).`;
 
 export async function identify(obverse: Photo, reverse: Photo | null): Promise<Identification> {
   const content: Anthropic.Beta.BetaContentBlockParam[] = [
@@ -109,13 +128,26 @@ function extractJson(text: string): unknown {
 
 export async function researchMarket(
   item: Item,
-  ctx: { spot: number | null; melt: number | null; ebay: Comp[] },
+  ctx: {
+    spot: number | null;
+    melt: number | null;
+    ebay: Comp[];
+    guide?: { price: number; low: number; high: number; comps: Comp[] } | null;
+    maker?: Maker | null;
+  },
 ): Promise<MarketResearch> {
   let prompt = `Determine the current fair market value of this item.\n\n${describeItem(item)}\n\n`;
   prompt += ctx.spot != null
     ? `Current ${item.metal} spot: $${ctx.spot.toFixed(2)}/troy oz. Melt value per unit: $${ctx.melt?.toFixed(2) ?? "unknown"}.\n`
     : `Spot price is unavailable right now.\n`;
   prompt += `Today's date: ${new Date().toISOString().slice(0, 10)}.\n`;
+  if (item.specs?.mintage) prompt += `Recorded mintage for this issue: ${item.specs.mintage}.\n`;
+  if (ctx.maker) prompt += `\nMaker background (${ctx.maker.name}): ${ctx.maker.about} ${ctx.maker.collecting}\n`;
+  if (ctx.guide) {
+    prompt += `\nNumista catalogue price guide for this year/mint (USD, by grade - a reference, not actual sales): ${ctx.guide.comps
+      .map((c) => `${c.title.split(" · ")[1]} $${c.price_usd}`)
+      .join(", ")}.\n`;
+  }
   if (ctx.ebay.length) {
     prompt += `\nData pulled from the eBay API (verify relevance before using):\n${JSON.stringify(ctx.ebay.slice(0, 40))}\n`;
   }

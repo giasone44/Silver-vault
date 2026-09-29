@@ -1,6 +1,8 @@
 import { config } from "./config.js";
 import { researchMarket } from "./ai.js";
 import { freeAppraisal } from "./appraise.js";
+import { matchMaker } from "./makers.js";
+import { numistaEnabled, priceGuide } from "./numista.js";
 import { getItem, listItems, setValuation } from "./db.js";
 import { ebayComps } from "./ebay.js";
 import type { Item, Valuation } from "./schemas.js";
@@ -26,7 +28,13 @@ export async function valuateItem(id: string): Promise<Item> {
 
   const research =
     config.aiProvider === "claude"
-      ? await researchMarket(item, { spot, melt, ebay })
+      ? await researchMarket(item, {
+          spot,
+          melt,
+          ebay,
+          guide: numistaEnabled() ? await priceGuide(item).catch(() => null) : null,
+          maker: matchMaker(item.mint, item.name),
+        })
       : await freeAppraisal(item, { spot, melt, ebay });
   const valuation: Valuation = {
     ...research,

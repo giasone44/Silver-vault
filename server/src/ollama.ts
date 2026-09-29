@@ -121,9 +121,26 @@ function toIdentification(r: LocalReading): Identification {
   };
 }
 
+/** Give up rather than spin forever if the Mac can't keep up. */
+const IDENTIFY_TIMEOUT_MS = 180_000;
+
 export async function ollamaIdentify(obverse: Photo, reverse: Photo | null): Promise<Identification> {
+  try {
+    return await readPhotos(obverse, reverse);
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new LocalAiError(
+        "The free on-Mac AI took too long on this Mac. For fast, accurate results add a Claude key in Settings.",
+      );
+    }
+    throw err;
+  }
+}
+
+async function readPhotos(obverse: Photo, reverse: Photo | null): Promise<Identification> {
   const res = await ollama("/api/chat", {
     method: "POST",
+    signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: config.ollamaModel,

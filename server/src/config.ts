@@ -20,4 +20,6 @@ export const config = {
   ebayClientSecret: env.EBAY_CLIENT_SECRET ?? "",
   ebayInsights: env.EBAY_MARKETPLACE_INSIGHTS === "true",
   webDistDir: path.resolve(env.WEB_DIST_DIR ?? "../app/dist"),
+  /** Settings file the launcher reads; keys saved from the app are written here. */
+  configFile: path.resolve(env.CONFIG_FILE ?? path.join(env.DATA_DIR ?? "./data", "config.env")),
 };

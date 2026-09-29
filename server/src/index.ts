@@ -11,7 +11,7 @@ import * as z from "zod/v4";
 import Anthropic from "@anthropic-ai/sdk";
 import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
-import { AiError, identify } from "./ai.js";
+import { AiError, checkApiKey, identify, useApiKey } from "./ai.js";
 import * as db from "./db.js";
 import { ebayEnabled } from "./ebay.js";
 import { MAKERS, matchMaker } from "./makers.js";
@@ -131,6 +131,24 @@ app.post("/api/identify", async (c) => {
 });
 
 app.get("/api/makers", (c) => c.json(MAKERS));
+
+/** Saves an Anthropic API key from the app and switches identification and valuation to Claude. */
+app.post("/api/settings/ai-key", async (c) => {
+  const { key } = z.object({ key: z.string().trim() }).parse(await c.req.json());
+  if (!/^sk-ant-[\w-]{20,}$/.test(key)) return c.json({ error: "That doesn't look like an Anthropic API key (it starts with sk-ant-)." }, 400);
+  if (!(await checkApiKey(key))) return c.json({ error: "Anthropic didn't accept that key. Check it was copied completely." }, 400);
+
+  // Replace (or add) the key line in the settings file so it survives restarts.
+  const existing = fs.existsSync(config.configFile) ? fs.readFileSync(config.configFile, "utf8") : "";
+  const lines = existing.split("\n").filter((l) => !/^\s*#?\s*ANTHROPIC_API_KEY=/.test(l));
+  lines.push(`ANTHROPIC_API_KEY="${key}"`);
+  fs.mkdirSync(path.dirname(config.configFile), { recursive: true });
+  fs.writeFileSync(config.configFile, lines.join("\n").replace(/\n{3,}/g, "\n\n") + "\n", { mode: 0o600 });
+
+  useApiKey(key);
+  config.aiProvider = "claude";
+  return c.json({ ok: true, ai_provider: config.aiProvider, ai_model: config.claudeModel });
+});
 
 // The app calls this when the add screen opens, so the model is loaded before the photos arrive.
 app.post("/api/warmup", (c) => {

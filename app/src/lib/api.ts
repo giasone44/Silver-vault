@@ -12,19 +12,28 @@ type UploadPhoto = Pick<Photo, "base64" | "mediaType">;
 const upload = (p?: Photo | null): UploadPhoto | null => (p ? { base64: p.base64, mediaType: p.mediaType } : null);
 
 export function createApi(s: Settings) {
-  async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  /** Every request has a time limit so the app never spins indefinitely. */
+  async function call<T>(path: string, init: RequestInit = {}, timeoutMs = 30_000): Promise<T> {
     let res: Response;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), timeoutMs);
     try {
       res = await fetch(`${s.serverUrl}${path}`, {
         ...init,
+        signal: abort.signal,
         headers: {
           "Content-Type": "application/json",
           ...(s.token ? { Authorization: `Bearer ${s.token}` } : {}),
           ...init.headers,
         },
       });
-    } catch {
-      throw new ApiError(`Can't reach the server at ${s.serverUrl}. Check Settings.`, 0);
+    } catch (e) {
+      if (abort.signal.aborted) {
+        throw new ApiError("This took too long. Check that Silver Vault is still running on your Mac, then try again.", 0);
+      }
+      throw new ApiError("Can't reach Silver Vault. Make sure it's running on your Mac and your phone is on the same Wi-Fi.", 0);
+    } finally {
+      clearTimeout(timer);
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status);
@@ -46,10 +55,11 @@ export function createApi(s: Settings) {
     identify: (obverse: Photo, reverse: Photo | null, small = false) => {
       const pick = (p: Photo | null) =>
         p ? { base64: small && p.aiBase64 ? p.aiBase64 : p.base64, mediaType: p.mediaType } : null;
-      return call<Identification>("/api/identify", {
-        method: "POST",
-        body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse) }),
-      });
+      return call<Identification>(
+        "/api/identify",
+        { method: "POST", body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse) }) },
+        200_000,
+      );
     },
     warmup: () => call<{ ok: true }>("/api/warmup", { method: "POST" }),
     items: () => call<Item[]>("/api/items"),
@@ -58,14 +68,17 @@ export function createApi(s: Settings) {
       call<Item>("/api/items", {
         method: "POST",
         body: JSON.stringify({ item, obverse: upload(obverse), reverse: upload(reverse) }),
-      }),
+      }, 60_000),
     update: (id: string, item: ItemInput, obverse?: Photo | null, reverse?: Photo | null) =>
       call<Item>(`/api/items/${id}`, {
         method: "PUT",
         body: JSON.stringify({ item, obverse: upload(obverse), reverse: upload(reverse) }),
-      }),
+      }, 60_000),
     remove: (id: string) => call<{ ok: true }>(`/api/items/${id}`, { method: "DELETE" }),
-    valuate: (id: string) => call<Item>(`/api/items/${id}/valuate`, { method: "POST" }),
+    // Market research reads many sources; allow it several minutes.
+    valuate: (id: string) => call<Item>(`/api/items/${id}/valuate`, { method: "POST" }, 360_000),
+    saveAiKey: (key: string) =>
+      call<{ ok: true; ai_provider: string; ai_model: string }>("/api/settings/ai-key", { method: "POST", body: JSON.stringify({ key }) }),
     revalue: (staleHours: number) =>
       call<{ queued: number }>("/api/revalue", { method: "POST", body: JSON.stringify({ staleHours }) }),
     photoUrl: (file: string | null) =>

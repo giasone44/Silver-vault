@@ -86,7 +86,15 @@ Every piece also has one-tap links to its **eBay sold listings** (what buyers ac
 
 Values never go below melt. Bullion values then move with spot between valuations; collector coins hold their value until you tap **Refresh report**. Every report states its sources and a confidence level.
 
-**Paid upgrade (optional, not needed):** adding an Anthropic API key to `config.env` switches photo reading and valuation to Claude. That's more accurate on worn or tiny details, and it researches actual sold prices across the web.
+## Best accuracy: Claude (recommended)
+
+For expert-level identification in seconds, plus research of actual sold prices across the web, connect Claude. It costs about 2–5¢ per identification and 10–40¢ per market report, billed by Anthropic.
+
+1. In Silver Vault, tap the **gear** (Settings).
+2. Tap **1 · Get a key**. On Anthropic's site, sign in, add a little credit under **Billing**, and create a key.
+3. Paste the key into **2 · Paste your key**, then tap **3 · Save**.
+
+That's it. Identification and valuation switch to Claude immediately, and the free on-Mac AI is no longer needed.
 
 ## For developers
 

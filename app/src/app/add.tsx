@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { PressableScale } from "../components/motion";
 import { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CatalogPicker } from "../components/CatalogPicker";
@@ -62,6 +63,12 @@ export default function AddItem() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {local && (
+          <PressableScale onPress={() => router.push("/settings")} style={styles.upgrade}>
+            <Text style={type.labelGold}>Using the free on-Mac AI</Text>
+            <Text style={[type.bodyMuted, { marginTop: 4 }]}>Slower and less accurate. Tap to add Claude for expert results in seconds.</Text>
+          </PressableScale>
+        )}
         <Step numeral="I" title="Photograph both faces" note="Fill the frame, soft even light, no glare. For slabs, keep the label legible." />
         <PhotoPair photos={photos} onChange={(side, p) => setPhotos((s) => ({ ...s, [side]: p }))} />
 
@@ -146,6 +153,7 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 20, paddingTop: 0, paddingBottom: 80, width: "100%", maxWidth: 720, alignSelf: "center" },
   step: { flexDirection: "row", gap: 14, alignItems: "flex-start", marginTop: 34, marginBottom: 22 },
   numeral: { fontFamily: fonts.engravedBold, color: colors.gold, fontSize: 22, width: 34, textAlign: "center", marginTop: -2 },
+  upgrade: { borderWidth: hairline, borderColor: colors.goldDeep, padding: 14, marginTop: 16 },
   verdict: {
     flexDirection: "row",
     gap: 16,
