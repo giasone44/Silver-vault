@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { emptyInput, ItemForm, useItemDraft } from "../../components/ItemForm";
 import { PhotoPair } from "../../components/PhotoPair";
 import { Button, SectionTitle } from "../../components/ui";
 import { BalanceWheel } from "../../components/watch";
 import { useApi } from "../../lib/api";
+import { notify } from "../../lib/notify";
 import { colors } from "../../lib/theme";
 import type { Item, ItemInput, Photo } from "../../lib/types";
 
@@ -22,7 +23,7 @@ export default function EditItem() {
       setItem(it);
       const { id: _id, obverse_photo, reverse_photo, valuation, created_at, updated_at, history, ...input } = it;
       form.reset(input as ItemInput);
-    }).catch((e) => Alert.alert("Load failed", String(e.message ?? e)));
+    }).catch((e) => notify("Load failed", String(e.message ?? e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, id]);
 
@@ -34,7 +35,7 @@ export default function EditItem() {
       await api.update(id, form.value(), photos.obverse, photos.reverse);
       router.back();
     } catch (e) {
-      Alert.alert("Save failed", e instanceof Error ? e.message : String(e));
+      notify("Save failed", e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
   };

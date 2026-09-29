@@ -4,16 +4,13 @@ import { SvgXml } from "react-native-svg";
 import { Reveal } from "../components/motion";
 import { Button, Field, Row, SectionTitle } from "../components/ui";
 import { createApi } from "../lib/api";
+import { notify } from "../lib/notify";
 import { useSettings } from "../lib/settings";
 import { useSpot } from "../lib/spot";
 import { colors, haptic, type } from "../lib/theme";
 import type { Health } from "../lib/types";
 
 
-function notify(title: string, msg: string) {
-  if (Platform.OS === "web") window.alert(`${title}\n\n${msg}`);
-  else Alert.alert(title, msg);
-}
 
 export default function SettingsScreen() {
   const { settings, save } = useSettings();

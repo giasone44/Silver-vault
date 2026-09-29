@@ -1,4 +1,5 @@
 import { ActionSheetIOS, Alert, Platform, StyleSheet, Text, View } from "react-native";
+import { notify } from "../lib/notify";
 import { capturePhoto } from "../lib/photos";
 import { haptic, type } from "../lib/theme";
 import type { Photo } from "../lib/types";
@@ -38,7 +39,7 @@ export function PhotoPair({ photos, existing, onChange, size = 150 }: {
           onChange(side, p);
         }
       } catch (e) {
-        Alert.alert("Photo failed", e instanceof Error ? e.message : String(e));
+        notify("Photo failed", e instanceof Error ? e.message : String(e));
       }
     });
 

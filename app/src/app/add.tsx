@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { PressableScale } from "../components/motion";
 import { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CatalogPicker } from "../components/CatalogPicker";
 import { emptyInput, inputFromIdentification, inputWithCatalog, ItemForm, useItemDraft } from "../components/ItemForm";
 import { Reveal } from "../components/motion";
@@ -21,6 +21,7 @@ export default function AddItem() {
   const form = useItemDraft(emptyInput());
   const [health, setHealth] = useState<Health | null>(null);
   const [catalogId, setCatalogId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const local = health?.ai_provider === "ollama";
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function AddItem() {
   const runIdentify = async () => {
     if (!photos.obverse) return;
     setBusy("identify");
+    setError(null);
     try {
       const result = await api.identify(photos.obverse, photos.reverse, local);
       setIdent(result);
@@ -40,7 +42,7 @@ export default function AddItem() {
       haptic.success();
     } catch (e) {
       haptic.error();
-      Alert.alert("Couldn't identify", e instanceof Error ? e.message : String(e));
+      setError(`Couldn't identify this piece. ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(null);
     }
@@ -48,14 +50,15 @@ export default function AddItem() {
 
   const save = async () => {
     const input = form.value();
-    if (!input.name) return Alert.alert("Name required", "Give the piece a name.");
+    if (!input.name) return setError("Give the piece a name (open Identified details → Review).");
     setBusy("save");
+    setError(null);
     try {
       const item = await api.create(input, photos.obverse, photos.reverse);
       haptic.success();
       router.replace({ pathname: "/item/[id]", params: { id: item.id } });
     } catch (e) {
-      Alert.alert("Save failed", e instanceof Error ? e.message : String(e));
+      setError(`Couldn't save. ${e instanceof Error ? e.message : String(e)}`);
       setBusy(null);
     }
   };
@@ -83,6 +86,11 @@ export default function AddItem() {
             />
           ) : (
             <Button title={ident ? "Examine again" : "Identify piece"} onPress={runIdentify} disabled={!photos.obverse} />
+          )}
+          {error && (
+            <View style={styles.error}>
+              <Text style={[type.body, { color: colors.down }]}>{error}</Text>
+            </View>
           )}
           {!showForm && busy !== "identify" && (
             <Button title="Enter details by hand" kind="secondary" onPress={() => setShowForm(true)} style={{ marginTop: 12 }} />
@@ -129,6 +137,11 @@ export default function AddItem() {
                 ) : null
               }
             />
+            {error && (
+              <View style={[styles.error, { marginTop: 24 }]}>
+                <Text style={[type.body, { color: colors.down }]}>{error}</Text>
+              </View>
+            )}
             <Button title="Enter into register" onPress={save} busy={busy === "save"} style={{ marginTop: 30 }} />
             <Text style={[type.italic, { textAlign: "center", marginTop: 10, fontSize: 13 }]}>
               Its dossier and market value are researched automatically once saved.
@@ -157,6 +170,7 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", gap: 14, alignItems: "flex-start", marginTop: 34, marginBottom: 22 },
   numeral: { fontFamily: fonts.engravedBold, color: colors.gold, fontSize: 22, width: 34, textAlign: "center", marginTop: -2 },
   upgrade: { borderWidth: hairline, borderColor: colors.goldDeep, padding: 14, marginTop: 16 },
+  error: { borderWidth: 1, borderColor: colors.down, padding: 14, marginTop: 16 },
   verdict: {
     flexDirection: "row",
     gap: 16,
