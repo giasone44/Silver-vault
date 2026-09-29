@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors, fonts } from "../lib/theme";
+import { colors, fonts, hairline, type } from "../lib/theme";
 import type { CatalogSpecs, Category, Identification, ItemInput, ItemType, Metal } from "../lib/types";
+import { PressableScale } from "./motion";
 import { Field, Segmented, SectionTitle } from "./ui";
 
 export function emptyInput(): ItemInput {
@@ -125,8 +126,19 @@ export function useItemDraft(initial: ItemInput) {
   };
 }
 
-export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
+/**
+ * Your own details (price paid, quantity…) come first. The identified details
+ * follow; with `collapsible` they start folded away behind one tap, since the
+ * app fills them in and they usually need no changes.
+ */
+export function ItemForm({ form, collapsible, catalog }: {
+  form: ReturnType<typeof useItemDraft>;
+  collapsible?: boolean;
+  /** Rendered at the top of the identified details (e.g. the catalogue picker). */
+  catalog?: ReactNode;
+}) {
   const { draft, set } = form;
+  const [open, setOpen] = useState(!collapsible);
   const f = (k: keyof ItemInput, label: string, extra: object = {}) => (
     <Field label={label} value={draft[k]} onChangeText={(v) => set(k, v)} {...extra} />
   );
@@ -137,6 +149,33 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
 
   return (
     <View>
+      <SectionTitle>Your details</SectionTitle>
+      <Text style={[styles.help, { marginTop: -4, marginBottom: 14 }]}>Optional: fill in what you know.</Text>
+      <View style={styles.grid}>
+        {f("purchase_price_per_unit", "Paid per piece ($)", num)}
+        {f("quantity", "How many", { keyboardType: "number-pad" })}
+        {f("purchase_date", "Date bought (YYYY-MM-DD)")}
+        {f("purchase_source", "Bought from")}
+        {f("storage_location", "Kept at")}
+        {f("tags", "Tags (comma separated)")}
+      </View>
+      <View style={{ height: 18 }} />
+      {f("notes", "Notes", { multiline: true })}
+
+      {collapsible && (
+        <PressableScale onPress={() => setOpen((o) => !o)} style={styles.toggle}>
+          <View style={{ flex: 1 }}>
+            <Text style={type.labelGold}>Identified details</Text>
+            <Text style={[styles.help, { marginTop: 3 }]}>
+              {draft.name || "Unnamed"}{draft.year ? ` · ${draft.year}` : ""}{draft.mint ? ` · ${draft.mint}` : ""}
+            </Text>
+          </View>
+          <Text style={[type.labelGold, { fontSize: 9 }]}>{open ? "Hide" : "Review"}</Text>
+        </PressableScale>
+      )}
+      {open && (
+        <View>
+      {catalog}
       {f("name", "Name")}
       <SectionTitle>Type</SectionTitle>
       {pick<ItemType>("item_type", [["coin", "Coin"], ["round", "Round"], ["bar", "Bar"], ["other", "Other"]])}
@@ -173,20 +212,11 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
       <View style={{ height: 18 }} />
       {f("condition_notes", "Condition notes", { multiline: true })}
 
-      <SectionTitle>Ownership</SectionTitle>
-      <View style={styles.grid}>
-        {f("quantity", "Quantity", { keyboardType: "number-pad" })}
-        {f("purchase_price_per_unit", "Paid per unit ($)", num)}
-        {f("purchase_date", "Purchase date (YYYY-MM-DD)")}
-        {f("purchase_source", "Bought from")}
-        {f("storage_location", "Storage location")}
-        {f("tags", "Tags (comma separated)")}
-      </View>
       <View style={{ height: 18 }} />
       {f("search_query", "Market search query")}
       <Text style={styles.help}>Used to look up recent sales. Include year, mint mark and grade.</Text>
-      <View style={{ height: 18 }} />
-      {f("notes", "Notes", { multiline: true })}
+        </View>
+      )}
     </View>
   );
 }
@@ -194,4 +224,14 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
 const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", columnGap: 18, rowGap: 18 },
   help: { fontFamily: fonts.serifItalic, color: colors.muted, fontSize: 13, marginTop: 6 },
+  toggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 30,
+    paddingVertical: 14,
+    borderTopWidth: hairline,
+    borderBottomWidth: hairline,
+    borderColor: colors.hairlineStrong,
+  },
 });

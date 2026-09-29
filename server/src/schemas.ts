@@ -71,6 +71,38 @@ export const MarketResearch = z.object({
 });
 export type MarketResearch = z.infer<typeof MarketResearch>;
 
+export const Source = z.object({ title: z.string(), url: z.string() });
+
+/** Everything worth knowing about a piece, researched from authoritative sources. */
+export const Dossier = z.object({
+  summary: z.string().describe("2-3 sentences: exactly what this piece is and why it matters"),
+  history: z.string().describe("Background: who issued it, when and why, the series and its place in collecting"),
+  obverse_design: z.string(),
+  reverse_design: z.string(),
+  designer: z.string().nullable(),
+  specifications: z.object({
+    composition: z.string().nullable(),
+    purity: z.number().nullable(),
+    weight_grams: z.number().nullable(),
+    gross_weight_troy_oz: z.number().nullable(),
+    fine_weight_troy_oz: z.number().nullable(),
+    diameter_mm: z.number().nullable(),
+    thickness_mm: z.number().nullable(),
+    edge: z.string().nullable(),
+  }),
+  mintage: z.string().nullable().describe("Mintage for this exact year and mint, with the source; for private bars explain that none is published"),
+  mintage_context: z.string().nullable().describe("How scarce this issue is relative to the rest of the series"),
+  key_facts: z.array(z.string()),
+  varieties: z.array(z.string()).describe("Known varieties, errors or die differences worth checking this piece for"),
+  authentication: z.array(z.string()).describe("Practical checks that this piece is genuine: weight, dimensions, magnet, ping, known fakes"),
+  grading_notes: z.string().nullable().describe("What determines grade for this type and where wear shows first"),
+  care: z.string().nullable(),
+  sources: z.array(Source),
+});
+export type Dossier = z.infer<typeof Dossier>;
+
+export type ResearchStatus = "queued" | "running" | "done" | "failed";
+
 export type Valuation = MarketResearch & {
   valued_at: string;
   spot_at_valuation: number | null;
@@ -121,6 +153,9 @@ export type Item = ItemInput & {
   obverse_photo: string | null;
   reverse_photo: string | null;
   valuation: Valuation | null;
+  dossier: Dossier | null;
+  research_status: ResearchStatus | null;
+  research_error: string | null;
   created_at: string;
   updated_at: string;
 };

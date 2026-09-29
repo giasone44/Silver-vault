@@ -53,7 +53,7 @@ export default function AddItem() {
     try {
       const item = await api.create(input, photos.obverse, photos.reverse);
       haptic.success();
-      router.replace({ pathname: "/item/[id]", params: { id: item.id, autovalue: "1" } });
+      router.replace({ pathname: "/item/[id]", params: { id: item.id } });
     } catch (e) {
       Alert.alert("Save failed", e instanceof Error ? e.message : String(e));
       setBusy(null);
@@ -63,10 +63,12 @@ export default function AddItem() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {local && (
+        {health && (local || !health.ai) && (
           <PressableScale onPress={() => router.push("/settings")} style={styles.upgrade}>
-            <Text style={type.labelGold}>Using the free on-Mac AI</Text>
-            <Text style={[type.bodyMuted, { marginTop: 4 }]}>Slower and less accurate. Tap to add Claude for expert results in seconds.</Text>
+            <Text style={type.labelGold}>{local ? "Using the free on-Mac AI" : "Connect Claude to identify pieces"}</Text>
+            <Text style={[type.bodyMuted, { marginTop: 4 }]}>
+              {local ? "Slower and less accurate. Tap to add Claude for expert results in seconds." : "Tap here, then paste your Claude key under Settings. It takes a minute."}
+            </Text>
           </PressableScale>
         )}
         <Step numeral="I" title="Photograph both faces" note="Fill the frame, soft even light, no glare. For slabs, keep the label legible." />
@@ -100,35 +102,36 @@ export default function AddItem() {
 
         {showForm && (
           <Reveal>
-            <Step numeral="II" title="Verify the record" note="Confirm the catalogue match, correct anything the examination missed, then add what you paid." />
-            {health?.catalog ? (
-              <View style={{ marginBottom: 8 }}>
-                <Text style={[type.labelGold, { marginBottom: 6 }]}>Catalogue match · exact specifications</Text>
-                <CatalogPicker
-                  key={ident?.search_query ?? "manual"}
-                  initialQuery={ident?.search_query ?? ""}
-                  itemType={ident?.item_type}
-                  selectedId={catalogId}
-                  autoApply={Boolean(ident)}
-                  at={() => {
-                    const v = form.value();
-                    return { year: v.year, mintMark: v.mint_mark };
-                  }}
-                  onApply={(c) => {
-                    setCatalogId(c.numista_id);
-                    form.reset(inputWithCatalog(form.value(), c));
-                  }}
-                />
-              </View>
-            ) : health ? (
-              <Text style={[type.italic, { marginBottom: 8 }]}>
-                Tip: connect the free Numista catalogue (see the README) to fill in exact weights, fineness and price guides.
-              </Text>
-            ) : null}
-            <ItemForm form={form} />
+            <Step numeral="II" title="Save it" note="Add what you paid if you know it. Everything else is researched for you after saving." />
+            <ItemForm
+              form={form}
+              collapsible={Boolean(ident)}
+              catalog={
+                health?.catalog ? (
+                  <View style={{ marginTop: 18, marginBottom: 8 }}>
+                    <Text style={[type.labelGold, { marginBottom: 6 }]}>Catalogue match · exact specifications</Text>
+                    <CatalogPicker
+                      key={ident?.search_query ?? "manual"}
+                      initialQuery={ident?.search_query ?? ""}
+                      itemType={ident?.item_type}
+                      selectedId={catalogId}
+                      autoApply={Boolean(ident)}
+                      at={() => {
+                        const v = form.value();
+                        return { year: v.year, mintMark: v.mint_mark };
+                      }}
+                      onApply={(c) => {
+                        setCatalogId(c.numista_id);
+                        form.reset(inputWithCatalog(form.value(), c));
+                      }}
+                    />
+                  </View>
+                ) : null
+              }
+            />
             <Button title="Enter into register" onPress={save} busy={busy === "save"} style={{ marginTop: 30 }} />
             <Text style={[type.italic, { textAlign: "center", marginTop: 10, fontSize: 13 }]}>
-              A market report will be prepared as soon as it is saved.
+              Its dossier and market value are researched automatically once saved.
             </Text>
           </Reveal>
         )}

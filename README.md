@@ -45,13 +45,13 @@ The Terminal window shows a **QR code**. With the iPhone on the same Wi-Fi, poin
 
 ## Everyday use
 
-- **Start:** double-click `Start Silver Vault.command` and keep its Terminal window open. Your Mac won't go to sleep while it's running.
-- **Stop:** close the Terminal window, or press Control-C in it.
-- **Add a piece:**
-  1. Tap the gold **+** and photograph the front and back.
-  2. Tap **Identify piece**. On an 8 GB Mac this takes a minute or two.
-  3. Check the catalogue match and the details, add what you paid, and save. The valuation runs automatically.
-- **Tips for good readings:** fill the frame, use soft even light, and avoid glare. Take an extra close-up if the date or mint mark is tiny. The local model is good but not perfect, so glance over the year and mint mark before saving.
+- **It runs by itself.** After the first setup, Silver Vault starts in the background whenever you log in to your Mac. There's no Terminal window to keep open. Keep the Mac plugged in so it stays awake for your iPhone.
+- **On your iPhone:** tap the Silver Vault icon on your home screen.
+- **Add a piece:** tap the gold **+**, photograph both sides (either order is fine), then tap **Identify piece**. Add what you paid if you know it, then tap **Enter into register**. Its dossier (history, specifications, mintage, varieties, authenticity checks) and market value are researched automatically in the background.
+- **A piece with missing information?** Open it and tap **Re-identify from photos**. What you paid, quantity and notes are kept.
+- **Connect another phone:** open **Settings** in Silver Vault on your Mac and scan the QR code.
+- **Update to a newer version:** download the new ZIP, replace the `silver-vault` folder in Documents, and double-click **Start Silver Vault.command** again.
+- **Turn it off:** double-click **Stop Silver Vault.command**.
 
 ## Your data
 

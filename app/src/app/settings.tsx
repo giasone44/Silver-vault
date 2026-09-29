@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SvgXml } from "react-native-svg";
 import { Reveal } from "../components/motion";
 import { Button, Field, Row, SectionTitle } from "../components/ui";
 import { createApi } from "../lib/api";
@@ -24,8 +25,11 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [aiKey, setAiKey] = useState("");
 
+  const [pairing, setPairing] = useState<{ url: string; svg: string } | null>(null);
+
   useEffect(() => {
     createApi(settings).health().then(setHealth).catch(() => {});
+    createApi(settings).pairing().then(setPairing).catch(() => {});
   }, [settings]);
 
   const saveKey = async () => {
@@ -85,7 +89,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       <SectionTitle>Claude · Best Accuracy</SectionTitle>
-      {health?.ai_provider === "claude" ? (
+      {health?.ai_provider === "claude" && health.ai ? (
         <Text style={[type.body, { color: colors.up }]}>Connected · {health.ai_model}</Text>
       ) : (
         <View style={{ gap: 14 }}>
@@ -97,6 +101,20 @@ export default function SettingsScreen() {
           <Field label="2 · Paste your key" value={aiKey} onChangeText={setAiKey} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="sk-ant-…" />
           <Button title="3 · Save" onPress={saveKey} busy={busy === "key"} disabled={!aiKey.trim()} />
         </View>
+      )}
+
+      {pairing && (
+        <>
+          <SectionTitle>Connect your iPhone</SectionTitle>
+          <View style={{ alignItems: "center", gap: 12 }}>
+            <View style={styles.qr}>
+              <SvgXml xml={pairing.svg} width={200} height={200} />
+            </View>
+            <Text style={[type.bodyMuted, { textAlign: "center" }]}>
+              On your iPhone, open the Camera and point it at this code, then tap the link. Once it opens, tap Share → Add to Home Screen.
+            </Text>
+          </View>
+        </>
       )}
 
       <SectionTitle>Connection</SectionTitle>
@@ -141,4 +159,5 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   body: { padding: 20, paddingBottom: 60, width: "100%", maxWidth: 720, alignSelf: "center" },
+  qr: { padding: 10, backgroundColor: colors.paper, borderRadius: 4 },
 });

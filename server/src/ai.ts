@@ -3,7 +3,8 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { BetaMessage, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { config } from "./config.js";
 import { MAKERS, type Maker } from "./makers.js";
-import { Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
+import { Dossier, Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
+import type * as z from "zod/v4";
 
 let client = new Anthropic();
 
@@ -152,9 +153,24 @@ export async function researchMarket(
     prompt += `\nData pulled from the eBay API (verify relevance before using):\n${JSON.stringify(ctx.ebay.slice(0, 40))}\n`;
   }
 
+  return webResearch(VALUE_SYSTEM, prompt, MarketResearch, "market research", { searches: 10, fetches: 6 });
+}
+
+/**
+ * Runs Claude with web search and page reading, then returns the JSON object
+ * its final answer ends with. If that isn't clean JSON, a second, cheap call
+ * restates the research in the required structure.
+ */
+async function webResearch<T extends z.ZodType>(
+  system: string,
+  prompt: string,
+  schema: T,
+  what: string,
+  limits: { searches: number; fetches: number },
+): Promise<z.infer<T>> {
   const tools: Anthropic.Beta.BetaToolUnion[] = [
-    { type: "web_search_20260209", name: "web_search", max_uses: 10 },
-    { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
+    { type: "web_search_20260209", name: "web_search", max_uses: limits.searches },
+    { type: "web_fetch_20260209", name: "web_fetch", max_uses: limits.fetches },
   ];
   const messages: BetaMessageParam[] = [{ role: "user", content: prompt }];
 
@@ -168,7 +184,7 @@ export async function researchMarket(
         max_tokens: 32000,
         ...FALLBACK,
         output_config: { effort: "high" },
-        system: VALUE_SYSTEM,
+        system,
         tools,
         messages,
       })
@@ -180,23 +196,42 @@ export async function researchMarket(
   if (!msg) throw new AiError("No response from model.");
 
   const lastText = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("\n");
-  const direct = MarketResearch.safeParse((() => { try { return extractJson(lastText); } catch { return null; } })());
+  const direct = schema.safeParse((() => { try { return extractJson(lastText); } catch { return null; } })());
   if (direct.success) return direct.data;
 
-  // The research text did not end in clean JSON; ask for a structured restatement.
   const structured = await client.beta.messages.parse({
     model: config.claudeModel,
     max_tokens: 16000,
     ...FALLBACK,
-    output_config: { effort: "low", format: betaZodOutputFormat(MarketResearch) },
+    output_config: { effort: "low", format: betaZodOutputFormat(schema) },
     messages: [
       {
         role: "user",
-        content: `Convert this market research into the required structure. Do not invent sales that are not mentioned.\n\n${lastText}`,
+        content: `Convert this ${what} into the required structure. Keep every fact and source; do not invent anything that is not stated.\n\n${lastText}`,
       },
     ],
   });
   assertNotRefused(structured);
-  if (!structured.parsed_output) throw new AiError("Could not read the valuation result.");
-  return structured.parsed_output;
+  if (!structured.parsed_output) throw new AiError(`Could not read the ${what} result.`);
+  return structured.parsed_output as z.infer<T>;
+}
+
+const DOSSIER_SYSTEM = `You are a senior numismatic researcher compiling a reference file on one coin, round or bar for its owner, who knows nothing about it yet. Be thorough and exact.
+
+Research method:
+1. Consult authoritative sources: the issuing mint or refiner, PCGS CoinFacts, NGC Coin Explorer, Numista, the Standard Catalog of World Coins (KM numbers), reputable dealers and collector references for private bars.
+2. Confirm the exact specifications (composition, fineness, weight, diameter, thickness, edge) for this type and year.
+3. Find the mintage for this exact year and mint mark, and how scarce it is within the series. Private bars and rounds have no published mintages: say so and explain what drives their rarity instead (era, variety, serial range).
+4. List known varieties, errors or die differences the owner should check for, and practical ways to confirm the piece is genuine.
+5. Every statement must be supported by what you found; if something is uncertain, say so. Record the sources you used.
+
+Write in plain English for a collector. When finished, output ONLY a single JSON object (no markdown fences) with exactly these keys:
+summary, history, obverse_design, reverse_design, designer (string|null), specifications ({composition, purity, weight_grams, gross_weight_troy_oz, fine_weight_troy_oz, diameter_mm, thickness_mm, edge} - numbers or null), mintage (string|null), mintage_context (string|null), key_facts (string[]), varieties (string[]), authentication (string[]), grading_notes (string|null), care (string|null), sources ([{title, url}]).`;
+
+export async function researchDossier(item: Item, maker: Maker | null): Promise<Dossier> {
+  let prompt = `Compile the reference file for this piece.\n\n${describeItem(item)}\n`;
+  if (item.specs?.obverse_description) prompt += `\nObverse as photographed: ${item.specs.obverse_description}`;
+  if (item.specs?.reverse_description) prompt += `\nReverse as photographed: ${item.specs.reverse_description}`;
+  if (maker) prompt += `\n\nMaker background (${maker.name}): ${maker.about}`;
+  return webResearch(DOSSIER_SYSTEM, prompt, Dossier, "reference file", { searches: 8, fetches: 6 });
 }

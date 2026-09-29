@@ -7,7 +7,9 @@ export const config = {
   dataDir: path.resolve(env.DATA_DIR ?? "./data"),
   appToken: env.APP_TOKEN ?? "",
   // AI: Claude when an Anthropic key is configured, otherwise a free local model via Ollama.
-  aiProvider: (env.AI_PROVIDER ?? (env.ANTHROPIC_API_KEY ? "claude" : "ollama")) as "claude" | "ollama",
+  // (AI_CHOICE is recorded by the Mac launcher; "free" means the on-Mac model.)
+  aiProvider: (env.AI_PROVIDER ??
+    (env.ANTHROPIC_API_KEY ? "claude" : env.AI_CHOICE === "free" ? "ollama" : "claude")) as "claude" | "ollama",
   claudeModel: env.CLAUDE_MODEL ?? "claude-opus-5-5",
   ollamaUrl: (env.OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/+$/, ""),
   ollamaModel: env.OLLAMA_MODEL ?? "qwen2.5vl:3b",

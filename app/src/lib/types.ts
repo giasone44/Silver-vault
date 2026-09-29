@@ -96,11 +96,43 @@ export type ItemInput = {
   specs: Identification | null;
 };
 
+/** Researched reference file for a piece (mirrors server Dossier). */
+export type Dossier = {
+  summary: string;
+  history: string;
+  obverse_design: string;
+  reverse_design: string;
+  designer: string | null;
+  specifications: {
+    composition: string | null;
+    purity: number | null;
+    weight_grams: number | null;
+    gross_weight_troy_oz: number | null;
+    fine_weight_troy_oz: number | null;
+    diameter_mm: number | null;
+    thickness_mm: number | null;
+    edge: string | null;
+  };
+  mintage: string | null;
+  mintage_context: string | null;
+  key_facts: string[];
+  varieties: string[];
+  authentication: string[];
+  grading_notes: string | null;
+  care: string | null;
+  sources: { title: string; url: string }[];
+};
+
+export type ResearchStatus = "queued" | "running" | "done" | "failed";
+
 export type Item = ItemInput & {
   id: string;
   obverse_photo: string | null;
   reverse_photo: string | null;
   valuation: Valuation | null;
+  dossier: Dossier | null;
+  research_status: ResearchStatus | null;
+  research_error: string | null;
   created_at: string;
   updated_at: string;
 };

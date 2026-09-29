@@ -10,6 +10,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import * as z from "zod/v4";
 import Anthropic from "@anthropic-ai/sdk";
 import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
 import { config } from "./config.js";
 import { AiError, checkApiKey, identify, useApiKey } from "./ai.js";
 import * as db from "./db.js";
@@ -20,6 +21,7 @@ import { LocalAiError, ollamaIdentify, ollamaStatus, warmUp } from "./ollama.js"
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, revalueStatus, valuateItem } from "./valuate.js";
+import { queueResearch, reidentify, resumeResearch } from "./research.js";
 
 const photosDir = path.join(config.dataDir, "photos");
 
@@ -77,7 +79,9 @@ app.onError((err, c) => {
   if (err instanceof Anthropic.AuthenticationError) return c.json({ error: "Server's Anthropic API key is invalid" }, 502);
   if (err instanceof Anthropic.RateLimitError) return c.json({ error: "AI rate limit reached - try again shortly" }, 429);
   if (err instanceof Anthropic.APIError) return c.json({ error: `AI service error: ${err.message}` }, 502);
-  if (err instanceof Anthropic.AnthropicError) return c.json({ error: `AI is not configured on the server: ${err.message}` }, 503);
+  if (err instanceof Anthropic.AnthropicError) {
+    return c.json({ error: "Claude isn't connected yet. Open Settings in Silver Vault and paste your Claude key." }, 503);
+  }
   return c.json({ error: err.message || "Server error" }, 500);
 });
 
@@ -185,6 +189,8 @@ app.post("/api/items", async (c) => {
     body.obverse ? savePhoto(item.id, "obverse", body.obverse) : null,
     body.reverse ? savePhoto(item.id, "reverse", body.reverse) : null,
   );
+  // Research the new piece in the background: reference file, then market value.
+  queueResearch(item.id);
   return c.json(db.getItem(item.id), 201);
 });
 
@@ -218,6 +224,24 @@ app.delete("/api/items/:id", (c) => {
 });
 
 app.post("/api/items/:id/valuate", async (c) => c.json(await valuateItem(c.req.param("id"))));
+
+app.post("/api/items/:id/research", (c) => {
+  const id = c.req.param("id");
+  if (!db.getItem(id)) return c.json({ error: "Not found" }, 404);
+  queueResearch(id);
+  return c.json(db.getItem(id));
+});
+
+app.post("/api/items/:id/reidentify", async (c) => c.json(await reidentify(c.req.param("id"))));
+
+/** Link and QR code that connect a phone (shown in Settings on the Mac). */
+app.get("/api/pairing", async (c) => {
+  const host = reachableAddresses().lan[0];
+  if (!host) return c.json({ error: "This Mac isn't connected to a network." }, 503);
+  const url = `http://${host}:${config.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
+  const svg = await QRCode.toString(url, { type: "svg", margin: 2, color: { dark: "#101115", light: "#EFE7D5" } });
+  return c.json({ url, svg });
+});
 
 app.post("/api/revalue", async (c) => {
   const body = z
@@ -282,6 +306,7 @@ function reachableAddresses() {
 
 serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
   if (config.aiProvider === "ollama") void warmUp();
+  resumeResearch();
   const { lan, tailscale } = reachableAddresses();
   const link = (host: string) => `http://${host}:${info.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
   console.log(`\n  Silver Vault is running.\n\n  On this Mac:  http://localhost:${info.port}`);

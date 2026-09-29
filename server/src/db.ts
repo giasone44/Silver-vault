@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { config } from "./config.js";
-import type { Item, ItemInput, Valuation } from "./schemas.js";
+import type { Dossier, Item, ItemInput, ResearchStatus, Valuation } from "./schemas.js";
 
 fs.mkdirSync(path.join(config.dataDir, "photos"), { recursive: true });
 
@@ -34,12 +34,24 @@ db.exec(`
   );
 `);
 
+// Columns added after the first release.
+for (const col of ["dossier TEXT", "research_status TEXT", "research_error TEXT"]) {
+  try {
+    db.exec(`ALTER TABLE items ADD COLUMN ${col}`);
+  } catch {
+    // already present
+  }
+}
+
 type Row = {
   id: string;
   data: string;
   obverse_photo: string | null;
   reverse_photo: string | null;
   valuation: string | null;
+  dossier: string | null;
+  research_status: string | null;
+  research_error: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -51,6 +63,9 @@ function toItem(row: Row): Item {
     obverse_photo: row.obverse_photo,
     reverse_photo: row.reverse_photo,
     valuation: row.valuation ? (JSON.parse(row.valuation) as Valuation) : null,
+    dossier: row.dossier ? (JSON.parse(row.dossier) as Dossier) : null,
+    research_status: (row.research_status as ResearchStatus | null) ?? null,
+    research_error: row.research_error,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -129,4 +144,12 @@ export function spotHistory(metal: string, sinceIso: string) {
   return db
     .prepare("SELECT minute, price FROM spot_history WHERE metal = ? AND minute >= ? ORDER BY minute")
     .all(metal, sinceIso.slice(0, 16)) as { minute: string; price: number }[];
+}
+
+export function setDossier(id: string, dossier: Dossier) {
+  db.prepare("UPDATE items SET dossier = ? WHERE id = ?").run(JSON.stringify(dossier), id);
+}
+
+export function setResearchStatus(id: string, status: ResearchStatus, error: string | null = null) {
+  db.prepare("UPDATE items SET research_status = ?, research_error = ? WHERE id = ?").run(status, error, id);
 }

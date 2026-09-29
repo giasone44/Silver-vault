@@ -77,6 +77,11 @@ export function createApi(s: Settings) {
     remove: (id: string) => call<{ ok: true }>(`/api/items/${id}`, { method: "DELETE" }),
     // Market research reads many sources; allow it several minutes.
     valuate: (id: string) => call<Item>(`/api/items/${id}/valuate`, { method: "POST" }, 360_000),
+    /** Queues the full background research (reference file + market value). */
+    research: (id: string) => call<Item>(`/api/items/${id}/research`, { method: "POST" }),
+    /** Reads the saved photos again from scratch, then re-researches. */
+    reidentify: (id: string) => call<Item>(`/api/items/${id}/reidentify`, { method: "POST" }, 200_000),
+    pairing: () => call<{ url: string; svg: string }>("/api/pairing"),
     saveAiKey: (key: string) =>
       call<{ ok: true; ai_provider: string; ai_model: string }>("/api/settings/ai-key", { method: "POST", body: JSON.stringify({ key }) }),
     revalue: (staleHours: number) =>

@@ -1,18 +1,36 @@
 #!/bin/bash
-# Double-click to start Silver Vault on this Mac.
+# Double-click to set up (or update) Silver Vault on this Mac.
 #
-# First run: checks for the free Ollama app (local AI), downloads the photo-
-# reading model, optionally asks for a free Numista catalogue key, installs
-# what it needs and builds the app. After that it just starts. Your settings,
-# database and photos live in ~/Silver Vault, outside this folder, so
-# replacing this folder with a newer download never touches your collection.
+# It installs what it needs, builds the app, and then hands Silver Vault to
+# macOS to run in the background: it starts by itself whenever you log in, so
+# you never need Terminal again. Just open it on your iPhone.
+#
+# Your settings, database and photos live in ~/Silver Vault, outside this
+# folder, so replacing this folder with a newer download never touches your
+# collection. Run this file again after downloading a new version to update.
+#
+# To stop the automatic start, double-click "Stop Silver Vault.command".
+
+DATA="$HOME/Silver Vault"
+CONF="$DATA/config.env"
+PROG="$DATA/program"
+LOG="$DATA/silver-vault.log"
+LABEL="com.silvervault.server"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+PORT=8787
+OLLAMA_URL="http://127.0.0.1:11434"
+
+# --- Background mode: started by macOS at login (see the plist below) ---------
+if [ "$1" = "--service" ]; then
+  cd "$PROG/server" || exit 1
+  # Keep the log from growing without limit.
+  [ -f "$LOG" ] && [ "$(wc -c <"$LOG")" -gt 5000000 ] && tail -c 1000000 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  # caffeinate -s keeps the Mac awake while it's plugged in, so your iPhone can always reach it.
+  exec caffeinate -s node --no-warnings --env-file="$CONF" --import tsx src/index.ts
+fi
 
 cd "$(dirname "$0")" || exit 1
 ROOT="$PWD"
-DATA="$HOME/Silver Vault"
-CONF="$DATA/config.env"
-PORT=8787
-OLLAMA_URL="http://127.0.0.1:11434"
 
 fail() {
   echo
@@ -36,13 +54,7 @@ if ! node -e "require('node:sqlite')" >/dev/null 2>&1; then
   open "https://nodejs.org/en/download"
   fail "Your Node.js ($(node -v)) is too old. Install the current LTS version from the page that just opened, then try again."
 fi
-
-# --- Already running? ----------------------------------------------------------
-if lsof -nP -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "  Silver Vault is already running - opening it."
-  open "http://localhost:$PORT"
-  exit 0
-fi
+NODE_DIR="$(dirname "$(command -v node)")"
 
 # --- First-time settings -------------------------------------------------------
 mkdir -p "$DATA"
@@ -51,7 +63,7 @@ if [ ! -f "$CONF" ]; then
   NUMISTA=$(osascript \
     -e 'set r to display dialog "Optional: paste a free Numista API key.
 
-It fills in exact coin specifications and price guides. Get one at numista.com/api, or click Skip and add it later." default answer "" with title "Silver Vault setup" buttons {"Skip", "Save"} default button "Save"' \
+It fills in exact coin specifications, mintages and price guides. Get one at numista.com/api, or click Skip and add it later." default answer "" with title "Silver Vault setup" buttons {"Skip", "Save"} default button "Save"' \
     -e 'if button returned of r is "Save" then return text returned of r' 2>/dev/null | tr -d '[:space:]')
   cat > "$CONF" <<EOF
 # Silver Vault settings. Edit with: open -e "$CONF"
@@ -62,28 +74,37 @@ DATA_DIR="$DATA"
 # Free coin catalogue - exact specs and price guides (numista.com/api)
 NUMISTA_API_KEY="$NUMISTA"
 
-# Local AI model (free, runs on this Mac through Ollama)
+# Claude (best accuracy): paste your key in the app under Settings, or here.
+# ANTHROPIC_API_KEY=
+
+# Free on-Mac AI, used only when no Claude key is set
 OLLAMA_MODEL="qwen2.5vl:3b"
 
 # Optional, free eBay developer keys (developer.ebay.com) - current listings as comparables
 # EBAY_CLIENT_ID=
 # EBAY_CLIENT_SECRET=
-
-# Optional, paid: an Anthropic API key switches to Claude for better reading and web price research
-# ANTHROPIC_API_KEY=
 EOF
   chmod 600 "$CONF"
   echo "  Settings saved to $CONF"
 fi
 TOKEN=$(grep '^APP_TOKEN=' "$CONF" | cut -d= -f2- | tr -d '"')
-MODEL=$(grep '^OLLAMA_MODEL=' "$CONF" | cut -d= -f2- | tr -d '"')
-MODEL=${MODEL:-qwen2.5vl:3b}
 
-# --- Local AI (Ollama) - skipped if a paid Anthropic key is configured -----------
-ollama_up() { curl -s -m 2 "$OLLAMA_URL/api/tags" >/dev/null; }
-model_ready() { curl -s -m 5 "$OLLAMA_URL/api/tags" | grep -q "\"name\":\"$MODEL\""; }
+# --- How to read photos: Claude (recommended) or the free on-Mac AI ------------
+if ! grep -q '^ANTHROPIC_API_KEY=..' "$CONF" && ! grep -q '^AI_CHOICE=' "$CONF"; then
+  CHOICE=$(osascript -e 'button returned of (display dialog "How should Silver Vault read your photos?
 
-if ! grep -q '^ANTHROPIC_API_KEY=..' "$CONF"; then
+Claude (recommended): expert accuracy in seconds, and researches each piece online. About 2–5¢ per identification. You paste a key under Settings in Silver Vault afterwards.
+
+Free on this Mac: slower and less accurate; downloads a 3 GB model." with title "Silver Vault setup" buttons {"Free on this Mac", "Claude"} default button "Claude")' 2>/dev/null)
+  [ "$CHOICE" = "Free on this Mac" ] && echo 'AI_CHOICE="free"' >>"$CONF" || echo 'AI_CHOICE="claude"' >>"$CONF"
+fi
+
+# --- Free on-Mac AI (Ollama): only if chosen and no Claude key -----------------
+if ! grep -q '^ANTHROPIC_API_KEY=..' "$CONF" && grep -q '^AI_CHOICE="free"' "$CONF"; then
+  MODEL=$(grep '^OLLAMA_MODEL=' "$CONF" | cut -d= -f2- | tr -d '"')
+  MODEL=${MODEL:-qwen2.5vl:3b}
+  ollama_up() { curl -s -m 2 "$OLLAMA_URL/api/tags" >/dev/null; }
+  model_ready() { curl -s -m 5 "$OLLAMA_URL/api/tags" | grep -q "\"name\":\"$MODEL\""; }
   if ! ollama_up; then
     if [ -d "/Applications/Ollama.app" ] || [ -d "$HOME/Applications/Ollama.app" ]; then
       echo "  Starting Ollama…"
@@ -91,7 +112,7 @@ if ! grep -q '^ANTHROPIC_API_KEY=..' "$CONF"; then
       for _ in $(seq 1 30); do ollama_up && break; sleep 1; done
     else
       open "https://ollama.com/download/mac"
-      fail "Silver Vault uses the free Ollama app to read your photos privately on this Mac. Its download page just opened: install it (drag it into Applications and open it once), then double-click this file again."
+      fail "The free on-Mac AI needs the Ollama app. Its download page just opened: install it (drag it into Applications and open it once), then double-click this file again."
     fi
   fi
   ollama_up || fail "Ollama didn't start. Open the Ollama app from Applications, then try again."
@@ -120,8 +141,68 @@ if [ ! -f app/dist/index.html ] || [ -n "$(find app/src app/package.json -newer 
   (cd app && CI=1 npx expo export -p web >/dev/null) || fail "Building the app failed - see the messages above."
 fi
 
-# --- Run -----------------------------------------------------------------------
-(sleep 3 && open "http://localhost:$PORT/?t=$TOKEN") &
-cd server || exit 1
-# caffeinate keeps the Mac from sleeping (and dropping your iPhone) while this runs.
-exec caffeinate -i node --no-warnings --env-file="$CONF" --import tsx src/index.ts
+# --- Hand over to macOS to run in the background ---------------------------------
+echo "  Installing Silver Vault to run automatically…"
+launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1
+# An older copy running in a Terminal window would hold the port; stop it.
+pkill -f "src/index.ts" >/dev/null 2>&1
+sleep 1
+
+# Run from ~/Silver Vault (macOS doesn't let background apps read Documents).
+mkdir -p "$PROG"
+rsync -a --delete --exclude .git "$ROOT/" "$PROG/" || fail "Couldn't copy Silver Vault into $PROG."
+
+mkdir -p "$HOME/Library/LaunchAgents"
+cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$PROG/Start Silver Vault.command</string>
+    <string>--service</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$NODE_DIR:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>$LOG</string>
+  <key>StandardErrorPath</key><string>$LOG</string>
+</dict>
+</plist>
+EOF
+launchctl bootstrap "gui/$(id -u)" "$PLIST" || fail "macOS didn't accept the background service. Try running this file again."
+
+echo "  Starting…"
+for _ in $(seq 1 40); do
+  curl -s -m 1 "http://localhost:$PORT/api/health" >/dev/null && break
+  sleep 1
+done
+curl -s -m 2 "http://localhost:$PORT/api/health" >/dev/null || {
+  echo
+  tail -20 "$LOG"
+  fail "Silver Vault didn't start. The lines above explain why; send a photo of them for help."
+}
+
+IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+LINK="http://$IP:$PORT/?t=$TOKEN"
+open "http://localhost:$PORT/?t=$TOKEN"
+
+echo
+echo "  ✓ Silver Vault is running, and will start by itself whenever you log in."
+echo "    Keep the Mac plugged in so it stays awake for your iPhone."
+if [ -n "$IP" ]; then
+  echo
+  echo "  To connect your iPhone (same Wi-Fi): point the Camera at this code and tap the link."
+  echo "  (The same code is in Silver Vault → Settings.)"
+  echo
+  (cd "$PROG/server" && node -e 'require("qrcode-terminal").generate(process.argv[1], { small: true }, (q) => console.log(q.replace(/^/gm, "  ")))' "$LINK")
+  echo "  $LINK"
+fi
+echo
+echo "  You can close this window."
+echo

@@ -1,9 +1,10 @@
 import * as Clipboard from "expo-clipboard";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { AnimatedNumber, PressableScale, Reveal } from "../../components/motion";
 import { Button, Certificate, Icon, PaperRow, Register, RegisterRow, Row, SectionTitle } from "../../components/ui";
+import { DossierPanel } from "../../components/Dossier";
 import { MakerPanel, MintageRecord, ResearchLinks } from "../../components/Reference";
 import { RateRecord, ValueScale } from "../../components/ValueScale";
 import { BalanceWheel, CoinFrame, Working } from "../../components/watch";
@@ -20,22 +21,23 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default function ItemScreen() {
-  const { id, autovalue } = useLocalSearchParams<{ id: string; autovalue?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const api = useApi();
   const { quote } = useSpot();
   const { width: screenW } = useWindowDimensions();
   const width = Math.min(screenW, 720) - 40;
   const [item, setItem] = useState<ItemDetail | null>(null);
-  const [valuing, setValuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
   const [side, setSide] = useState<"Obverse" | "Reverse">("Obverse");
-  const autoRan = useRef(false);
   const makers = useMakers();
+  const wasResearching = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const it = await api.item(id);
       setItem(it);
+      setError(null);
       return it;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -43,31 +45,54 @@ export default function ItemScreen() {
     }
   }, [api, id]);
 
-  const valuate = useCallback(async () => {
-    setValuing(true);
-    setError(null);
-    try {
-      await api.valuate(id);
-      await load();
-      haptic.success();
-    } catch (e) {
-      haptic.error();
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setValuing(false);
-    }
-  }, [api, id, load]);
+  useFocusEffect(useCallback(() => void load(), [load]));
 
-  useFocusEffect(
-    useCallback(() => {
-      void load().then((it) => {
-        if (it && autovalue && !it.valuation && !autoRan.current) {
-          autoRan.current = true;
-          void valuate();
-        }
-      });
-    }, [load, autovalue, valuate]),
-  );
+  // Research runs on the Mac in the background; check in every few seconds until it finishes.
+  const researching = item?.research_status === "queued" || item?.research_status === "running";
+  useEffect(() => {
+    if (researching) {
+      wasResearching.current = true;
+      const t = setInterval(load, 4000);
+      return () => clearInterval(t);
+    }
+    if (wasResearching.current && item?.research_status === "done") haptic.success();
+    wasResearching.current = false;
+  }, [researching, load, item?.research_status]);
+
+  const refreshResearch = async () => {
+    try {
+      await api.research(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const reidentify = async () => {
+    const go = async () => {
+      setReading(true);
+      setError(null);
+      try {
+        await api.reidentify(id);
+        await load();
+        haptic.success();
+      } catch (e) {
+        haptic.error();
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setReading(false);
+      }
+    };
+    const msg = "Read the photos again from scratch and redo the research? What you paid, quantity, notes and location are kept.";
+    if (Platform.OS === "web") {
+      if (window.confirm(msg)) void go();
+    } else {
+      Alert.alert("Re-identify from photos?", msg, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Re-identify", onPress: go },
+      ]);
+    }
+  };
 
   if (!item) {
     return (
@@ -79,6 +104,7 @@ export default function ItemScreen() {
 
   const lv = liveValue(item, quote);
   const v = item.valuation;
+  const ds = item.dossier?.specifications;
   const maker = matchMaker(makers, item.mint, item.name);
   const certified = item.certification_service && item.certification_service !== "none";
   const cert = certified
@@ -165,10 +191,30 @@ export default function ItemScreen() {
         </RegisterRow>
       </Reveal>
 
+      {(researching || reading) && (
+        <View style={styles.status}>
+          <Working
+            title={reading ? "Examining" : "Researching"}
+            detail={
+              reading
+                ? "Reading your photos again…"
+                : "Building this piece's dossier and checking recent sales. This takes a minute or two; you can leave this screen."
+            }
+            timer
+          />
+        </View>
+      )}
+      {item.research_status === "failed" && !researching && (
+        <View style={styles.status}>
+          <Text style={[type.body, { color: colors.down }]}>Research didn't finish: {item.research_error}</Text>
+          <Button title="Try again" kind="secondary" onPress={refreshResearch} style={{ marginTop: 12 }} />
+        </View>
+      )}
+
+      {item.dossier && <DossierPanel dossier={item.dossier} />}
+
       <SectionTitle>Market Report</SectionTitle>
-      {valuing ? (
-        <Working title="Regulating" detail="Gathering catalogue prices, market listings and live spot." />
-      ) : v ? (
+      {v ? (
         <View style={{ gap: 18 }}>
           <ValueScale
             width={width}
@@ -195,13 +241,10 @@ export default function ItemScreen() {
         </View>
       ) : (
         <Text style={[type.body, { color: colors.ivoryDim }]}>
-          Not yet researched. The report studies recent sold listings, auction results and dealer prices for this exact piece.
+          {researching ? "Being prepared…" : "Not yet researched. The report studies recent sold listings, auction results and dealer prices for this exact piece."}
         </Text>
       )}
       {error && <Text style={[type.body, { color: colors.down, marginTop: 12 }]}>{error}</Text>}
-      {!valuing && (
-        <Button title={v ? "Refresh report" : "Research value"} onPress={valuate} style={{ marginTop: 20 }} />
-      )}
       <ResearchLinks item={item} />
 
       {v && v.comps.length > 0 && (
@@ -228,12 +271,13 @@ export default function ItemScreen() {
       <View style={{ height: 34 }} />
       <Certificate title="Certificate of Specification">
         <PaperRow label="Metal" value={cap(item.metal)} />
+        <PaperRow label="Composition" value={ds?.composition} />
         <PaperRow label="Fineness" value={item.purity != null ? String(item.purity) : null} />
         <PaperRow label="Fine content" value={oz(fineOz(item))} />
         <PaperRow label="Gross weight" value={item.gross_weight_troy_oz != null ? oz(item.gross_weight_troy_oz) : null} />
-        <PaperRow label="Mass" value={item.specs?.weight_grams != null ? `${item.specs.weight_grams} g` : null} />
-        <PaperRow label="Diameter" value={item.specs?.diameter_mm != null ? `${item.specs.diameter_mm} mm` : null} />
-        <PaperRow label="Thickness" value={item.specs?.thickness_mm != null ? `${item.specs.thickness_mm} mm` : null} />
+        <PaperRow label="Mass" value={num(item.specs?.weight_grams ?? ds?.weight_grams, "g")} />
+        <PaperRow label="Diameter" value={num(item.specs?.diameter_mm ?? ds?.diameter_mm, "mm")} />
+        <PaperRow label="Thickness" value={num(item.specs?.thickness_mm ?? ds?.thickness_mm, "mm")} />
         <PaperRow label="Year" value={item.year} />
         <PaperRow label="Mint" value={item.mint} />
         <PaperRow label="Mint mark" value={item.mint_mark} />
@@ -242,15 +286,15 @@ export default function ItemScreen() {
         <PaperRow label="Series" value={item.series} />
         <PaperRow label="Catalogue" value={item.catalog_number} />
         <PaperRow label="Mintage" value={item.specs?.mintage} />
-        <PaperRow label="Designer" value={item.specs?.designer} />
-        <PaperRow label="Edge" value={item.specs?.edge} />
+        <PaperRow label="Designer" value={item.specs?.designer ?? item.dossier?.designer} />
+        <PaperRow label="Edge" value={item.specs?.edge ?? ds?.edge} />
         <PaperRow label="Certification" value={certified ? `${cert}${item.cert_number ? ` · No. ${item.cert_number}` : ""}` : "Uncertified"} />
         <PaperRow label="Grade" value={item.grade} />
         <PaperRow label="Variety" value={item.specs?.variety_or_error} />
-        {item.specs && (
+        {(item.specs?.obverse_description || item.condition_notes) && (
           <View style={{ marginTop: 12, gap: 8 }}>
-            <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Obverse. </Text>{item.specs.obverse_description}</Text>
-            <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Reverse. </Text>{item.specs.reverse_description}</Text>
+            {item.specs?.obverse_description ? <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Obverse. </Text>{item.specs.obverse_description}</Text> : null}
+            {item.specs?.reverse_description ? <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Reverse. </Text>{item.specs.reverse_description}</Text> : null}
             {item.condition_notes && <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Condition. </Text>{item.condition_notes}</Text>}
           </View>
         )}
@@ -279,6 +323,8 @@ export default function ItemScreen() {
       )}
 
       <View style={{ gap: 12, marginTop: 36 }}>
+        <Button title="Refresh research" kind="secondary" onPress={refreshResearch} disabled={researching || reading} />
+        <Button title="Re-identify from photos" kind="secondary" onPress={reidentify} disabled={researching || reading} />
         <Button title="Share sell sheet" kind="secondary" onPress={shareSellSheet} />
         <Button title="Remove from register" kind="danger" onPress={confirmDelete} />
       </View>
@@ -287,6 +333,7 @@ export default function ItemScreen() {
 }
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+const num = (n: number | null | undefined, unit: string) => (n != null ? `${n} ${unit}` : null);
 
 function formatDate(iso: string) {
   const d = new Date(iso.length <= 10 ? iso + "T12:00:00" : iso);
@@ -321,6 +368,7 @@ const styles = StyleSheet.create({
   headerLink: { color: colors.gold, fontFamily: fonts.engraved, fontSize: 11, letterSpacing: 2 },
   flipHint: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
   tip: { borderLeftWidth: 1, borderLeftColor: colors.gold, paddingLeft: 14 },
+  status: { marginTop: 26, paddingVertical: 8, borderTopWidth: hairline, borderBottomWidth: hairline, borderColor: colors.hairlineStrong },
   comp: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: hairline, borderBottomColor: colors.hairline },
   compDate: { fontFamily: fonts.serifItalic, color: colors.ivoryDim, fontSize: 12, marginTop: 2 },
   compTitle: { fontFamily: fonts.serif, color: colors.ivory, fontSize: 15, lineHeight: 18 },
