@@ -6,12 +6,14 @@ import { MAKERS, type Maker } from "./makers.js";
 import { Dossier, Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
 import type * as z from "zod/v4";
 
-let client = new Anthropic();
+// Anthropic is occasionally briefly overloaded; retry a few times before giving up.
+const MAX_RETRIES = 5;
+let client = new Anthropic({ maxRetries: MAX_RETRIES });
 
 /** Switches to a new API key without restarting (set from the app's Settings screen). */
 export function useApiKey(apiKey: string) {
   process.env.ANTHROPIC_API_KEY = apiKey;
-  client = new Anthropic({ apiKey });
+  client = new Anthropic({ apiKey, maxRetries: MAX_RETRIES });
 }
 
 /** Confirms a key works before it is saved. */

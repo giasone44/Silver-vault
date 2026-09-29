@@ -22,6 +22,7 @@ import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, revalueStatus, valuateItem } from "./valuate.js";
 import { queueResearch, reidentify, resumeResearch } from "./research.js";
+import { autoUpdates, currentVersion, latestVersion, scheduleUpdates, startUpdate } from "./updater.js";
 
 const photosDir = path.join(config.dataDir, "photos");
 
@@ -78,6 +79,9 @@ app.onError((err, c) => {
   if (err instanceof LocalAiError) return c.json({ error: err.message }, 503);
   if (err instanceof Anthropic.AuthenticationError) return c.json({ error: "Server's Anthropic API key is invalid" }, 502);
   if (err instanceof Anthropic.RateLimitError) return c.json({ error: "AI rate limit reached - try again shortly" }, 429);
+  if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500) {
+    return c.json({ error: "Claude is busy right now (Anthropic's servers). Please try again in a minute." }, 503);
+  }
   if (err instanceof Anthropic.APIError) return c.json({ error: `AI service error: ${err.message}` }, 502);
   if (err instanceof Anthropic.AnthropicError) {
     return c.json({ error: "Claude isn't connected yet. Open Settings in Silver Vault and paste your Claude key." }, 503);
@@ -234,6 +238,20 @@ app.post("/api/items/:id/research", (c) => {
 
 app.post("/api/items/:id/reidentify", async (c) => c.json(await reidentify(c.req.param("id"))));
 
+app.get("/api/version", async (c) => {
+  const current = currentVersion();
+  const latest = await latestVersion();
+  return c.json({
+    current,
+    latest: latest.sha,
+    update_available: Boolean(latest.sha && current && latest.sha !== current),
+    auto_updates: autoUpdates,
+    repo_private: latest.isPrivate,
+  });
+});
+
+app.post("/api/update", (c) => c.json({ started: startUpdate() }));
+
 /** Link and QR code that connect a phone (shown in Settings on the Mac). */
 app.get("/api/pairing", async (c) => {
   const host = reachableAddresses().lan[0];
@@ -286,6 +304,12 @@ app.get("/api/export.csv", async (c) => {
 // Serve the desktop web build of the app (npm run build:web in /app) if present.
 if (fs.existsSync(config.webDistDir)) {
   const root = path.relative(process.cwd(), config.webDistDir);
+  // Pages must always be fetched fresh so phones pick up updates straight away;
+  // scripts and images have content-hashed names and can be cached.
+  app.use("/*", async (c, next) => {
+    await next();
+    if (!/\.(js|css|png|jpg|svg|ttf|woff2?|ico)$/.test(c.req.path)) c.header("Cache-Control", "no-cache");
+  });
   app.use("/*", serveStatic({ root }));
   app.get("*", serveStatic({ root, path: "index.html" }));
 }
@@ -307,6 +331,7 @@ function reachableAddresses() {
 serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
   if (config.aiProvider === "ollama") void warmUp();
   resumeResearch();
+  scheduleUpdates();
   const { lan, tailscale } = reachableAddresses();
   const link = (host: string) => `http://${host}:${info.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
   console.log(`\n  Silver Vault is running.\n\n  On this Mac:  http://localhost:${info.port}`);

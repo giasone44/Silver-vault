@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path";
 import { identify, researchDossier } from "./ai.js";
 import { config } from "./config.js";
@@ -40,7 +41,15 @@ async function drain() {
       db.setResearchStatus(id, "done");
     } catch (err) {
       console.error(`research ${id} failed:`, err);
-      db.setResearchStatus(id, "failed", err instanceof Error ? err.message : String(err));
+      const busy = err instanceof Anthropic.APIError && (err.status ?? 0) >= 500;
+      const message = busy
+        ? "Claude was busy (Anthropic's servers). Tap Try again in a minute."
+        : err instanceof Anthropic.AnthropicError && !(err instanceof Anthropic.APIError)
+          ? "Claude isn't connected yet. Open Settings and paste your Claude key."
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      db.setResearchStatus(id, "failed", message);
     }
   }
   running = false;

@@ -13,6 +13,19 @@ A private register for your silver, gold, coins, rounds and bars. It runs entire
 - **Organize.** Search by year, mint, grade, tag or storage location. Filter by type and metal, and sort by value, gain, weight, date added or name. See portfolio value, cost basis, gain, melt value, and total silver and gold ounces at a glance.
 - **Sell well.** Each piece has a shareable sell sheet, and you can export everything to CSV for insurance or taxes.
 
+## Install on your Mac (one command, about 5 minutes)
+
+1. Install **Node.js** from **https://nodejs.org** (the **LTS** button; click Continue through the installer).
+2. Open **Terminal** (press ⌘ + Space, type **Terminal**, press Enter), paste this line and press Enter:
+
+   ```
+   curl -fsSL https://raw.githubusercontent.com/giasone44/silver-vault/main/install.sh | bash
+   ```
+
+3. Answer the one or two questions it asks, and wait until it says **"All done"**. Close the window.
+
+That's all. Silver Vault now starts by itself whenever you log in and **updates itself** automatically. You never need Terminal again. On your iPhone, scan the QR code it shows (also in **Settings**), then tap **Share → Add to Home Screen**.
+
 ## Setup on your Mac (one time, about 20 minutes)
 
 Everything below is free.

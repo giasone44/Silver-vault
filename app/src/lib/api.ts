@@ -82,6 +82,11 @@ export function createApi(s: Settings) {
     /** Reads the saved photos again from scratch, then re-researches. */
     reidentify: (id: string) => call<Item>(`/api/items/${id}/reidentify`, { method: "POST" }, 200_000),
     pairing: () => call<{ url: string; svg: string }>("/api/pairing"),
+    version: () =>
+      call<{ current: string | null; latest: string | null; update_available: boolean; auto_updates: boolean; repo_private: boolean }>(
+        "/api/version",
+      ),
+    updateApp: () => call<{ started: boolean }>("/api/update", { method: "POST" }),
     saveAiKey: (key: string) =>
       call<{ ok: true; ai_provider: string; ai_model: string }>("/api/settings/ai-key", { method: "POST", body: JSON.stringify({ key }) }),
     revalue: (staleHours: number) =>

@@ -26,11 +26,31 @@ export default function SettingsScreen() {
   const [aiKey, setAiKey] = useState("");
 
   const [pairing, setPairing] = useState<{ url: string; svg: string } | null>(null);
+  const [version, setVersion] = useState<Awaited<ReturnType<ReturnType<typeof createApi>["version"]>> | null>(null);
 
   useEffect(() => {
     createApi(settings).health().then(setHealth).catch(() => {});
     createApi(settings).pairing().then(setPairing).catch(() => {});
+    createApi(settings).version().then(setVersion).catch(() => {});
   }, [settings]);
+
+  const updateNow = async () => {
+    setBusy("update");
+    try {
+      const { started } = await createApi(draft()).updateApp();
+      haptic.success();
+      notify(
+        started ? "Updating" : "Can't update here",
+        started
+          ? "Silver Vault is downloading the latest version and will restart by itself in a few minutes. Then pull down to refresh."
+          : "Automatic updates work once Silver Vault has been set up with the installer on your Mac.",
+      );
+    } catch (e) {
+      notify("Update failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const saveKey = async () => {
     setBusy("key");
@@ -114,6 +134,22 @@ export default function SettingsScreen() {
               On your iPhone, open the Camera and point it at this code, then tap the link. Once it opens, tap Share → Add to Home Screen.
             </Text>
           </View>
+        </>
+      )}
+
+      {version && (
+        <>
+          <SectionTitle>Updates</SectionTitle>
+          <Text style={type.bodyMuted}>
+            {version.repo_private
+              ? "Automatic updates are off because the GitHub project is private."
+              : version.update_available
+                ? "A newer version is available. It installs by itself within a few hours, or now:"
+                : `Up to date${version.current ? ` · version ${version.current.slice(0, 7)}` : ""}. Silver Vault checks for updates by itself.`}
+          </Text>
+          {version.auto_updates && !version.repo_private && (
+            <Button title="Update now" kind="secondary" onPress={updateNow} busy={busy === "update"} style={{ marginTop: 12 }} />
+          )}
         </>
       )}
 
