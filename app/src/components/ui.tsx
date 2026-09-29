@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
 import Svg, { Circle, Line, Path } from "react-native-svg";
-import { colors, fonts, hairline, type } from "../lib/theme";
+import { colors, fonts, hairline, noWebOutline, type } from "../lib/theme";
 import { PressableScale } from "./motion";
 
 // ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
         {...props}
         onFocus={(e) => { setFocused(true); props.onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); props.onBlur?.(e); }}
-        style={[styles.input, focused && { borderBottomColor: colors.gold }, props.multiline && { minHeight: 64, textAlignVertical: "top" }]}
+        style={[styles.input, noWebOutline, focused && { borderBottomColor: colors.gold }, props.multiline && { minHeight: 64, textAlignVertical: "top" }]}
       />
     </View>
   );

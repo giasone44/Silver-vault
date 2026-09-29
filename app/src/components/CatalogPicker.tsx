@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, View } from "react-native";
 import { useApi } from "../lib/api";
-import { colors, fonts, hairline, haptic, type } from "../lib/theme";
+import { colors, fonts, hairline, haptic, noWebOutline, type } from "../lib/theme";
 import type { CatalogHit, CatalogSpecs } from "../lib/types";
 import { PressableScale } from "./motion";
 import { Icon } from "./ui";
@@ -10,8 +10,10 @@ import { Icon } from "./ui";
  * Search the free Numista catalogue and apply a match's exact specifications.
  * With `autoApply`, the best match for the initial query is applied at once.
  */
-export function CatalogPicker({ initialQuery, itemType, selectedId, autoApply, onApply }: {
+export function CatalogPicker({ initialQuery, itemType, selectedId, autoApply, onApply, at }: {
   initialQuery: string;
+  /** Current year / mint mark, so the matching issue's mintage is filled in. */
+  at?: () => { year: string | null; mintMark: string | null };
   itemType?: string;
   selectedId: number | null;
   autoApply?: boolean;
@@ -23,18 +25,24 @@ export function CatalogPicker({ initialQuery, itemType, selectedId, autoApply, o
   const [busy, setBusy] = useState<number | "search" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoDone = useRef(false);
+  // Callbacks from the parent change every render; read them through refs so
+  // the search box isn't reset while you type.
+  const onApplyRef = useRef(onApply);
+  const atRef = useRef(at);
+  onApplyRef.current = onApply;
+  atRef.current = at;
 
   const apply = useCallback(async (id: number) => {
     setBusy(id);
     try {
-      onApply(await api.catalogSpecs(id));
+      onApplyRef.current(await api.catalogSpecs(id, atRef.current?.()));
       haptic.success();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
-  }, [api, onApply]);
+  }, [api]);
 
   const search = useCallback(async (q: string, auto = false) => {
     if (!q.trim()) return;
@@ -52,7 +60,6 @@ export function CatalogPicker({ initialQuery, itemType, selectedId, autoApply, o
   }, [api, itemType, apply]);
 
   useEffect(() => {
-    setQuery(initialQuery);
     if (initialQuery && !autoDone.current) {
       autoDone.current = true;
       void search(initialQuery, autoApply);
@@ -71,7 +78,7 @@ export function CatalogPicker({ initialQuery, itemType, selectedId, autoApply, o
           placeholder="e.g. 1881 Morgan dollar, Engelhard 10 oz"
           placeholderTextColor={colors.muted}
           selectionColor={colors.gold}
-          style={styles.input}
+          style={[styles.input, noWebOutline]}
         />
         <PressableScale onPress={() => search(query)} style={styles.go}>
           <Text style={[type.labelGold, { fontSize: 9 }]}>Search</Text>

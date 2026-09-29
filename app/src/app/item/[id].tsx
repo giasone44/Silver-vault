@@ -4,9 +4,11 @@ import { useCallback, useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { AnimatedNumber, PressableScale, Reveal } from "../../components/motion";
 import { Button, Certificate, Icon, PaperRow, Register, RegisterRow, Row, SectionTitle } from "../../components/ui";
+import { MakerPanel, MintageRecord, ResearchLinks } from "../../components/Reference";
 import { RateRecord, ValueScale } from "../../components/ValueScale";
 import { BalanceWheel, CoinFrame, Working } from "../../components/watch";
 import { useApi } from "../../lib/api";
+import { matchMaker, useMakers } from "../../lib/makers";
 import { ago, money, oz, pct, typeLabel } from "../../lib/format";
 import { useSpot } from "../../lib/spot";
 import { colors, fonts, haptic, hairline, type } from "../../lib/theme";
@@ -28,6 +30,7 @@ export default function ItemScreen() {
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"Obverse" | "Reverse">("Obverse");
   const autoRan = useRef(false);
+  const makers = useMakers();
 
   const load = useCallback(async () => {
     try {
@@ -76,6 +79,7 @@ export default function ItemScreen() {
 
   const lv = liveValue(item, quote);
   const v = item.valuation;
+  const maker = matchMaker(makers, item.mint, item.name);
   const certified = item.certification_service && item.certification_service !== "none";
   const cert = certified
     ? `${item.certification_service} ${item.certification_grade ?? ""}`.trim()
@@ -198,6 +202,7 @@ export default function ItemScreen() {
       {!valuing && (
         <Button title={v ? "Refresh report" : "Research value"} onPress={valuate} style={{ marginTop: 20 }} />
       )}
+      <ResearchLinks item={item} />
 
       {v && v.comps.length > 0 && (
         <>
@@ -251,6 +256,9 @@ export default function ItemScreen() {
         )}
       </Certificate>
 
+      {maker && <MakerPanel maker={maker} />}
+      <MintageRecord item={item} />
+
       <SectionTitle>Provenance</SectionTitle>
       <Row label="Quantity" value={String(item.quantity)} />
       <Row label="Cost basis" value={money(lv.cost)} />
@@ -296,6 +304,7 @@ function sellSheet(item: ItemDetail, quote: SpotQuote | null): string {
     item.certification_service && item.certification_service !== "none"
       ? `Certified: ${item.certification_service} ${item.certification_grade ?? ""} (cert #${item.cert_number ?? "—"})`
       : `Raw${item.grade ? ` · ${item.grade}` : ""}`,
+    item.specs?.mintage ? `Mintage: ${item.specs.mintage}` : null,
     item.condition_notes ? `Condition: ${item.condition_notes}` : null,
     item.quantity > 1 ? `Quantity available: ${item.quantity}` : null,
     "",

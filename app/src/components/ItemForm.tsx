@@ -61,7 +61,7 @@ function blankIdentification(v: ItemInput): Identification {
  */
 export function inputWithCatalog(v: ItemInput, c: CatalogSpecs): ItemInput {
   const { numista_id, catalog_title, catalog_url, weight_grams, diameter_mm, thickness_mm, obverse_description,
-    reverse_description, edge, designer, mints, ...fields } = c;
+    reverse_description, edge, designer, mints, mintage, issues, ...fields } = c;
   const specs = v.specs ?? blankIdentification(v);
   return {
     ...v,
@@ -78,6 +78,7 @@ export function inputWithCatalog(v: ItemInput, c: CatalogSpecs): ItemInput {
       reverse_description: specs.reverse_description || reverse_description || "",
       edge: edge ?? specs.edge,
       designer: designer ?? specs.designer,
+      mintage: mintage != null ? mintage.toLocaleString("en-US") : specs.mintage,
     },
   };
 }

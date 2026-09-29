@@ -1,5 +1,6 @@
 import * as z from "zod/v4";
 import { config } from "./config.js";
+import { MAKERS } from "./makers.js";
 import { Identification } from "./schemas.js";
 
 // Free, private photo identification with a vision model running on this Mac
@@ -19,6 +20,8 @@ Rules:
 - purity as a decimal (0.999, 0.9999, 0.900). Weights in troy ounces. If a weight like "1 OZ" or "10 OZ" is stamped, use it.
 - For graded slabs, copy the grading service, grade and certification number from the label.
 - Use null for anything you cannot see or do not know. Never guess a mint mark or year you cannot read.
+- mint: the issuing mint or refiner. Look for maker names and logos such as: ${MAKERS.map((m) => m.name).join(", ")}.
+  On bars, the maker's name or logo and a serial number are usually stamped on the face.
 - search_query: the words a collector would type to find this exact item, e.g. "1881-S Morgan Dollar" or "10 oz Engelhard silver bar".
 - confidence: 0 to 1.
 - notes_for_user: what is unclear and which closer photo would help, or null.`;

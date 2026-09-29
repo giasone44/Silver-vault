@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSettings, type Settings } from "./settings";
-import type { CatalogHit, CatalogSpecs, Health, Identification, Item, ItemDetail, ItemInput, Photo, SpotQuote } from "./types";
+import type { CatalogHit, CatalogIssue, CatalogSpecs, Health, Maker, Identification, Item, ItemDetail, ItemInput, Photo, SpotQuote } from "./types";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -35,7 +35,10 @@ export function createApi(s: Settings) {
     health: () => call<Health>("/api/health"),
     catalogSearch: (q: string, type?: string) =>
       call<CatalogHit[]>(`/api/catalog/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ""}`),
-    catalogSpecs: (id: number) => call<CatalogSpecs>(`/api/catalog/${id}`),
+    catalogSpecs: (id: number, at?: { year?: string | null; mintMark?: string | null }) =>
+      call<CatalogSpecs>(`/api/catalog/${id}?year=${encodeURIComponent(at?.year ?? "")}&mint_mark=${encodeURIComponent(at?.mintMark ?? "")}`),
+    catalogIssues: (id: number) => call<CatalogIssue[]>(`/api/catalog/${id}/issues`),
+    makers: () => call<Maker[]>("/api/makers"),
     spot: () => call<SpotQuote>("/api/spot"),
     spotHistory: (metal: string, hours: number) =>
       call<{ minute: string; price: number }[]>(`/api/spot/history?metal=${metal}&hours=${hours}`),

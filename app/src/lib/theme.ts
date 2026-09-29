@@ -60,6 +60,9 @@ export const type = StyleSheet.create({
 
 export const hairline = StyleSheet.hairlineWidth;
 
+/** Browsers draw a focus box around text inputs; the gold underline replaces it. */
+export const noWebOutline = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as object;
+
 /** Animated's native driver isn't available on web. */
 export const nativeDriver = Platform.OS !== "web";
 

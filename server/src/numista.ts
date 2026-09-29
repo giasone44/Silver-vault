@@ -76,10 +76,35 @@ export type CatalogSpecs = Partial<ItemInput> & {
   edge: string | null;
   designer: string | null;
   mints: string[];
+  /** Mintage of the issue matching the given year / mint mark, if known. */
+  mintage: number | null;
+  issues: CatalogIssue[];
 };
 
-export async function catalogSpecs(id: number): Promise<CatalogSpecs> {
-  const t = await get(`/types/${id}`);
+export type CatalogIssue = { id: number; year: number | null; mint_letter: string | null; mintage: number | null; comment: string | null };
+
+export async function catalogIssues(id: number): Promise<CatalogIssue[]> {
+  const issues = (await get(`/types/${id}/issues`)) as any[];
+  return issues.map((i) => ({
+    id: i.id,
+    year: i.gregorian_year ?? i.year ?? null,
+    mint_letter: i.mint_letter || null,
+    mintage: typeof i.mintage === "number" ? i.mintage : null,
+    comment: i.comment ?? null,
+  }));
+}
+
+/** The issue matching a year and mint mark (a blank mark matches issues without one). */
+export function findIssue(issues: CatalogIssue[], year: string | number | null | undefined, mintMark: string | null | undefined) {
+  const y = year ? Number(String(year).match(/\d{4}/)?.[0]) : null;
+  const mark = (mintMark ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+  const sameYear = issues.filter((i) => !y || i.year === y);
+  return sameYear.find((i) => (i.mint_letter ?? "").toUpperCase() === mark) ?? (y ? sameYear[0] : undefined) ?? null;
+}
+
+export async function catalogSpecs(id: number, at?: { year?: string | null; mintMark?: string | null }): Promise<CatalogSpecs> {
+  const [t, issues] = await Promise.all([get(`/types/${id}`), catalogIssues(id).catch(() => [] as CatalogIssue[])]);
+  const issue = at?.year ? findIssue(issues, at.year, at.mintMark) : null;
   const purity = parseFineness(t.composition?.text);
   const grams: number | null = typeof t.weight === "number" ? t.weight : null;
   const gross = grams != null ? grams / GRAMS_PER_TROY_OZ : null;
@@ -96,6 +121,8 @@ export async function catalogSpecs(id: number): Promise<CatalogSpecs> {
     edge: t.edge?.description ?? null,
     designer: [...(t.obverse?.engravers ?? []), ...(t.reverse?.engravers ?? [])].join(", ") || null,
     mints: (t.mints ?? []).map((m: any) => m.name),
+    mintage: issue?.mintage ?? null,
+    issues,
   };
   const set = <K extends keyof ItemInput>(k: K, v: ItemInput[K] | null | undefined) => {
     if (v != null && v !== "") (specs as any)[k] = v;
@@ -131,12 +158,7 @@ function gradeKey(grade: string | null | undefined): (typeof GRADES)[number] {
 /** Price-guide values for this piece's year / mint mark, keyed to its grade. */
 export async function priceGuide(item: Item): Promise<{ price: number; low: number; high: number; comps: Comp[] } | null> {
   if (!item.numista_id) return null;
-  const issues = (await get(`/types/${item.numista_id}/issues`)) as any[];
-  const year = item.year ? Number(item.year.match(/\d{4}/)?.[0]) : null;
-  const mark = (item.mint_mark ?? "").toUpperCase().replace(/[^A-Z]/g, "");
-  const issue =
-    issues.find((i) => (!year || i.gregorian_year === year || i.year === year) && (i.mint_letter ?? "").toUpperCase() === mark) ??
-    issues.find((i) => !year || i.gregorian_year === year || i.year === year);
+  const issue = findIssue(await catalogIssues(item.numista_id), item.year, item.mint_mark);
   if (!issue) return null;
 
   const j = await get(`/types/${item.numista_id}/issues/${issue.id}/prices`, { currency: "USD" });

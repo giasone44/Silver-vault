@@ -14,7 +14,8 @@ import { config } from "./config.js";
 import { AiError, identify } from "./ai.js";
 import * as db from "./db.js";
 import { ebayEnabled } from "./ebay.js";
-import { catalogSpecs, numistaEnabled, searchCatalog } from "./numista.js";
+import { MAKERS, matchMaker } from "./makers.js";
+import { catalogIssues, catalogSpecs, numistaEnabled, searchCatalog } from "./numista.js";
 import { LocalAiError, ollamaIdentify, ollamaStatus } from "./ollama.js";
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
@@ -26,7 +27,13 @@ const Photo = z.object({
   base64: z.string().min(100),
   mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
 });
-const SaveBody = z.object({ item: ItemInput, obverse: Photo.nullish(), reverse: Photo.nullish() });
+const SaveBody = z
+  .object({ item: ItemInput, obverse: Photo.nullish(), reverse: Photo.nullish() })
+  .transform((b) => {
+    // Record the maker under its standard name, however it was typed.
+    const maker = matchMaker(b.item.mint, b.item.name);
+    return maker ? { ...b, item: { ...b.item, mint: maker.name } } : b;
+  });
 
 function savePhoto(itemId: string, side: "obverse" | "reverse", photo: z.infer<typeof Photo>): string {
   const ext = photo.mediaType.split("/")[1] === "jpeg" ? "jpg" : photo.mediaType.split("/")[1];
@@ -116,8 +123,14 @@ app.get("/api/spot/history", (c) => {
 app.post("/api/identify", async (c) => {
   const body = z.object({ obverse: Photo, reverse: Photo.nullish() }).parse(await c.req.json());
   const reverse = body.reverse ?? null;
-  return c.json(config.aiProvider === "claude" ? await identify(body.obverse, reverse) : await ollamaIdentify(body.obverse, reverse));
+  const ident = config.aiProvider === "claude" ? await identify(body.obverse, reverse) : await ollamaIdentify(body.obverse, reverse);
+  // Put the maker under its standard name ("Englehard" -> "Engelhard").
+  const maker = matchMaker(ident.mint, ident.name, ident.search_query);
+  if (maker) ident.mint = maker.name;
+  return c.json(ident);
 });
+
+app.get("/api/makers", (c) => c.json(MAKERS));
 
 app.get("/api/catalog/search", async (c) => {
   if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
@@ -130,7 +143,12 @@ app.get("/api/catalog/search", async (c) => {
 
 app.get("/api/catalog/:id", async (c) => {
   if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
-  return c.json(await catalogSpecs(Number(c.req.param("id"))));
+  return c.json(await catalogSpecs(Number(c.req.param("id")), { year: c.req.query("year"), mintMark: c.req.query("mint_mark") }));
+});
+
+app.get("/api/catalog/:id/issues", async (c) => {
+  if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
+  return c.json(await catalogIssues(Number(c.req.param("id"))));
 });
 
 app.get("/api/items", (c) => c.json(db.listItems()));

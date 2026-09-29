@@ -6,6 +6,8 @@ A private register for your silver, gold, coins, rounds and bars. It runs entire
 
 - **Reads your photos, privately.** A free AI model runs on your Mac through the Ollama app and reads the year, mint mark, legends, fineness stamps and slab labels. Your photos never leave your Mac.
 - **Exact specifications.** Pick the matching entry from the free Numista catalogue (the best match is chosen automatically). It fills in weight, fineness, fine content, diameter, catalogue number, designer and descriptions.
+- **Makers.** A built-in register of mints and refiners covers private refiners (Engelhard, Johnson Matthey, Handy & Harman, PAMP, Valcambi, Credit Suisse, Heraeus, Degussa and more), US private mints (SilverTowne, Sunshine, Northwest Territorial and others), and government mints (US Mint, Royal Canadian Mint, Royal Mint, Perth, Austrian, Mexican, South African, China). Each piece shows its maker's history, what years it operated, and what collectors look for. Pieces are recognized even when misspelled ("Englehard", "Johnson Mathew"), and you can filter your collection by maker.
+- **Mintages.** Each catalogued coin shows how many were struck for every year and mint mark, with yours highlighted and ranked by scarcity. Private bars have no published mintages; for those, rarity comes from variety, era and serial number.
 - **Values.** Live melt value, Numista price guides for the specific year, mint and grade, and current eBay listings (optional). Every report lists its sources.
 - **Live spot prices.** Silver, gold, platinum and palladium update every 30 seconds. Bullion values move with spot.
 - **Organize.** Search by year, mint, grade, tag or storage location. Filter by type and metal, and sort by value, gain, weight, date added or name. See portfolio value, cost basis, gain, melt value, and total silver and gold ounces at a glance.
@@ -80,6 +82,8 @@ Each valuation uses the best source available, in this order:
 3. **Current eBay asking prices**, shaded down about 8%, because listings sell below their ask.
 4. **Melt value** at live spot.
 
+Every piece also has one-tap links to its **eBay sold listings** (what buyers actually paid) and its **Numista catalogue page**. This matters most for collectible bars such as vintage Engelhard or Johnson Matthey, where melt alone undervalues them.
+
 Values never go below melt. Bullion values then move with spot between valuations; collector coins hold their value until you tap **Refresh report**. Every report states its sources and a confidence level.
 
 **Paid upgrade (optional, not needed):** adding an Anthropic API key to `config.env` switches photo reading and valuation to Claude. That's more accurate on worn or tiny details, and it researches actual sold prices across the web.
@@ -88,5 +92,5 @@ Values never go below melt. Bullion values then move with spot between valuation
 
 | Path | What it is |
 |---|---|
-| `server/` | Node + TypeScript API (Hono, built-in SQLite). Local AI via Ollama (`ollama.ts`), Numista catalogue (`numista.ts`), free valuation (`appraise.ts`), optional Claude (`ai.ts`). `npm start` reads `server/.env`. |
+| `server/` | Node + TypeScript API (Hono, built-in SQLite). Local AI via Ollama (`ollama.ts`), Numista catalogue and mintages (`numista.ts`), mint and refiner register (`makers.ts`), free valuation (`appraise.ts`), optional Claude (`ai.ts`). `npm start` reads `server/.env`. |
 | `app/` | Expo / React Native app for iPhone and web. Screens are in `app/src/app/`. `npm run build:web` builds the web version. |

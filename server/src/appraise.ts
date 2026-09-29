@@ -1,4 +1,5 @@
 import { AiError } from "./ai.js";
+import { matchMaker } from "./makers.js";
 import { priceGuide, numistaEnabled } from "./numista.js";
 import type { Comp, Item, MarketResearch } from "./schemas.js";
 
@@ -83,12 +84,21 @@ export async function freeAppraisal(
   low = Math.max(Math.min(low, estimate), floor * 0.97);
   high = Math.max(high, estimate);
 
+  // Makers whose vintage pieces collectors pay up for; melt alone undervalues them.
+  const maker = matchMaker(item.mint, item.name);
+  const collectible = maker && ["engelhard", "johnson-matthey", "handy-harman", "mother-lode", "degussa", "northwest-territorial"].includes(maker.id);
+  const makerNote =
+    collectible && !sold.length && !guide
+      ? ` ${maker.name} pieces are collected and often sell above melt, so check the eBay sold listings (link below) for this exact variety.`
+      : "";
+
   const comps = [...ebay.filter((c) => c.kind === "sold"), ...(guide?.comps ?? []), ...ebay.filter((c) => c.kind === "asking")].slice(0, 25);
   const premium = melt ? ((estimate - melt) / melt) * 100 : null;
   const summary =
     `Based on ${sources.join(" and ")}.` +
     (melt ? ` Melt value is $${melt.toFixed(2)}${premium != null && premium > 0.5 ? `, so this carries a ${premium.toFixed(0)}% premium over its metal` : ""}.` : "") +
-    (confidence === "low" ? " Treat this as a rough guide; a paid appraisal or recent sold listings would firm it up." : "");
+    makerNote +
+    (confidence === "low" && !makerNote ? " Treat this as a rough guide; recent sold listings would firm it up." : "");
 
   return {
     pricing_model,

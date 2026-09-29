@@ -100,6 +100,10 @@ export default function AddItem() {
                   itemType={ident?.item_type}
                   selectedId={catalogId}
                   autoApply={Boolean(ident)}
+                  at={() => {
+                    const v = form.value();
+                    return { year: v.year, mintMark: v.mint_mark };
+                  }}
                   onApply={(c) => {
                     setCatalogId(c.numista_id);
                     form.reset(inputWithCatalog(form.value(), c));

@@ -9,9 +9,10 @@ import { Button, Icon, Pusher, Register, RegisterRow, SectionTitle, Segmented } 
 import { BalanceWheel, MainDial } from "../components/watch";
 import { useApi } from "../lib/api";
 import { money } from "../lib/format";
+import { matchMaker, useMakers } from "../lib/makers";
 import { useSettings } from "../lib/settings";
 import { useSpot } from "../lib/spot";
-import { colors, fonts, haptic, hairline, type } from "../lib/theme";
+import { colors, fonts, haptic, hairline, noWebOutline, type } from "../lib/theme";
 import type { Item } from "../lib/types";
 import { fineOz, liveValue, portfolioTotals } from "../lib/value";
 
@@ -36,6 +37,22 @@ export default function Inventory() {
   const [kind, setKind] = useState<(typeof TYPES)[number][0]>("all");
   const [metal, setMetal] = useState<(typeof METALS)[number][0]>("all");
   const [sort, setSort] = useState<SortKey>("value");
+  const [makerFilter, setMakerFilter] = useState<string>("all");
+  const makers = useMakers();
+
+  // Each piece's maker under its standard name, falling back to the recorded mint.
+  const makerOf = useCallback(
+    (i: Item) => matchMaker(makers, i.mint, i.name)?.name ?? i.mint ?? null,
+    [makers],
+  );
+  const makerOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const i of items ?? []) {
+      const m = makerOf(i);
+      if (m) counts.set(m, (counts.get(m) ?? 0) + 1);
+    }
+    return [["all", "All makers"] as const, ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([m, n]) => [m, `${m} · ${n}`] as const)];
+  }, [items, makerOf]);
 
   const load = useCallback(async () => {
     try {
@@ -51,10 +68,13 @@ export default function Inventory() {
   const visible = useMemo(() => {
     if (!items) return [];
     const q = query.trim().toLowerCase();
+    const queryMaker = q ? matchMaker(makers, q) : null; // "englehard" finds Engelhard
     const filtered = items.filter((i) => {
       if (kind !== "all" && i.item_type !== kind) return false;
       if (metal !== "all" && i.metal !== metal) return false;
+      if (makerFilter !== "all" && makerOf(i) !== makerFilter) return false;
       if (!q) return true;
+      if (queryMaker && makerOf(i) === queryMaker.name) return true;
       return [i.name, i.year, i.mint, i.mint_mark, i.series, i.country, i.grade, i.certification_service, i.cert_number, i.storage_location, i.notes, ...i.tags]
         .filter(Boolean)
         .some((s) => String(s).toLowerCase().includes(q));
@@ -68,7 +88,7 @@ export default function Inventory() {
       return Date.parse(i.created_at);
     };
     return [...filtered].sort((a, b) => key(b) - key(a));
-  }, [items, query, kind, metal, sort, quote]);
+  }, [items, query, kind, metal, makerFilter, makerOf, makers, sort, quote]);
 
   const totals = portfolioTotals(visible, quote);
   const filtered = visible.length !== (items?.length ?? 0);
@@ -120,16 +140,17 @@ export default function Inventory() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search year, mint, grade, tag, location…"
+          placeholder="Search maker, year, grade, tag, location…"
           placeholderTextColor={colors.muted}
           selectionColor={colors.gold}
-          style={styles.searchInput}
+          style={[styles.searchInput, noWebOutline]}
           clearButtonMode="while-editing"
         />
       </View>
       <View style={{ gap: 10, marginTop: 14 }}>
         <Segmented options={TYPES} value={kind} onChange={setKind} />
         <Segmented options={METALS} value={metal} onChange={setMetal} />
+        {makerOptions.length > 2 && <Segmented options={makerOptions} value={makerFilter} onChange={setMakerFilter} />}
       </View>
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Ordered by</Text>

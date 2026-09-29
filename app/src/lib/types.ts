@@ -152,4 +152,20 @@ export type CatalogSpecs = Partial<ItemInput> & {
   edge: string | null;
   designer: string | null;
   mints: string[];
+  mintage: number | null;
+  issues: CatalogIssue[];
+};
+
+export type CatalogIssue = { id: number; year: number | null; mint_letter: string | null; mintage: number | null; comment: string | null };
+
+export type Maker = {
+  id: string;
+  name: string;
+  aliases: string[];
+  kind: string;
+  country: string;
+  founded: string | null;
+  status: string;
+  about: string;
+  collecting: string;
 };
