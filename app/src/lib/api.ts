@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useSettings, type Settings } from "./settings";
-import type { Identification, Item, ItemDetail, ItemInput, Photo, SpotQuote } from "./types";
+import type { CatalogHit, CatalogSpecs, Health, Identification, Item, ItemDetail, ItemInput, Photo, SpotQuote } from "./types";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -32,7 +32,10 @@ export function createApi(s: Settings) {
   }
 
   return {
-    health: () => call<{ ok: boolean; ai: boolean; ebay: boolean; ebay_sold_data: boolean; spot_provider: string }>("/api/health"),
+    health: () => call<Health>("/api/health"),
+    catalogSearch: (q: string, type?: string) =>
+      call<CatalogHit[]>(`/api/catalog/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ""}`),
+    catalogSpecs: (id: number) => call<CatalogSpecs>(`/api/catalog/${id}`),
     spot: () => call<SpotQuote>("/api/spot"),
     spotHistory: (metal: string, hours: number) =>
       call<{ minute: string; price: number }[]>(`/api/spot/history?metal=${metal}&hours=${hours}`),

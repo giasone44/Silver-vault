@@ -6,8 +6,8 @@ import { createApi } from "../lib/api";
 import { useSettings } from "../lib/settings";
 import { useSpot } from "../lib/spot";
 import { colors, haptic, type } from "../lib/theme";
+import type { Health } from "../lib/types";
 
-type Health = Awaited<ReturnType<ReturnType<typeof createApi>["health"]>>;
 
 function notify(title: string, msg: string) {
   if (Platform.OS === "web") window.alert(`${title}\n\n${msg}`);
@@ -73,7 +73,15 @@ export default function SettingsScreen() {
 
       {health && (
         <Reveal style={{ marginTop: 18 }}>
-          <Row label="Identification & research" value={<Text style={[type.body, { color: health.ai ? colors.up : colors.down }]}>{health.ai ? "Ready" : "API key missing"}</Text>} />
+          <Row
+            label={health.ai_provider === "ollama" ? "Photo reading · on this Mac" : "Photo reading · Claude"}
+            value={
+              <Text style={[type.body, { color: health.ai ? colors.up : colors.down }]}>
+                {health.ai ? `Ready · ${health.ai_model}` : health.ai_detail ?? "API key missing"}
+              </Text>
+            }
+          />
+          <Row label="Numista catalogue" value={health.catalog ? "Connected" : "Not connected"} />
           <Row label="Spot source" value={health.spot_provider} />
           <Row label="eBay listings" value={health.ebay ? "Connected" : "Not configured"} />
           <Row label="eBay sold data" value={health.ebay_sold_data ? "Connected" : "Not enabled"} />

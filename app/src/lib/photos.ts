@@ -3,7 +3,8 @@ import * as ImagePicker from "expo-image-picker";
 import { Alert, Platform } from "react-native";
 import type { Photo } from "./types";
 
-const MAX_EDGE = 1600;
+// Enough to read dates and mint marks, small enough for a local model on an 8 GB Mac.
+const MAX_EDGE = 1280;
 
 /** Downscale to keep uploads small while leaving enough detail to read dates and mint marks. */
 async function toPhoto(asset: ImagePicker.ImagePickerAsset): Promise<Photo> {

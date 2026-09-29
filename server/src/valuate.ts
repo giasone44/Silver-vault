@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { researchMarket } from "./ai.js";
+import { freeAppraisal } from "./appraise.js";
 import { getItem, listItems, setValuation } from "./db.js";
 import { ebayComps } from "./ebay.js";
 import type { Item, Valuation } from "./schemas.js";
@@ -23,13 +24,16 @@ export async function valuateItem(id: string): Promise<Item> {
   const query = item.search_query ?? item.specs?.search_query ?? item.name;
   const { comps: ebay } = await ebayComps(query);
 
-  const research = await researchMarket(item, { spot, melt, ebay });
+  const research =
+    config.aiProvider === "claude"
+      ? await researchMarket(item, { spot, melt, ebay })
+      : await freeAppraisal(item, { spot, melt, ebay });
   const valuation: Valuation = {
     ...research,
     valued_at: new Date().toISOString(),
     spot_at_valuation: spot,
     melt_at_valuation: melt,
-    model: config.claudeModel,
+    model: config.aiProvider === "claude" ? config.claudeModel : "free: melt + catalogue + marketplace",
   };
   setValuation(id, valuation);
   return getItem(id)!;

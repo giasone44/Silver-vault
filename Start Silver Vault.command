@@ -1,16 +1,18 @@
 #!/bin/bash
 # Double-click to start Silver Vault on this Mac.
 #
-# First run: asks for your Anthropic API key, installs what it needs and
-# builds the app. After that it just starts. Your settings, database and
-# photos live in ~/Silver Vault, outside this folder, so replacing this
-# folder with a newer download never touches your collection.
+# First run: checks for the free Ollama app (local AI), downloads the photo-
+# reading model, optionally asks for a free Numista catalogue key, installs
+# what it needs and builds the app. After that it just starts. Your settings,
+# database and photos live in ~/Silver Vault, outside this folder, so
+# replacing this folder with a newer download never touches your collection.
 
 cd "$(dirname "$0")" || exit 1
 ROOT="$PWD"
 DATA="$HOME/Silver Vault"
 CONF="$DATA/config.env"
 PORT=8787
+OLLAMA_URL="http://127.0.0.1:11434"
 
 fail() {
   echo
@@ -46,30 +48,61 @@ fi
 mkdir -p "$DATA"
 if [ ! -f "$CONF" ]; then
   echo "  First-time setup."
-  KEY=$(osascript -e 'text returned of (display dialog "Paste your Anthropic API key.\n\nIt starts with sk-ant- and comes from console.anthropic.com → API Keys." default answer "" with title "Silver Vault setup" with hidden answer)' 2>/dev/null)
-  KEY=$(echo "$KEY" | tr -d '[:space:]')
-  case "$KEY" in
-    sk-ant-*) ;;
-    *) fail "That doesn't look like an Anthropic API key (it should start with sk-ant-). Double-click this file to try again." ;;
-  esac
+  NUMISTA=$(osascript \
+    -e 'set r to display dialog "Optional: paste a free Numista API key.
+
+It fills in exact coin specifications and price guides. Get one at numista.com/api, or click Skip and add it later." default answer "" with title "Silver Vault setup" buttons {"Skip", "Save"} default button "Save"' \
+    -e 'if button returned of r is "Save" then return text returned of r' 2>/dev/null | tr -d '[:space:]')
   cat > "$CONF" <<EOF
 # Silver Vault settings. Edit with: open -e "$CONF"
-ANTHROPIC_API_KEY="$KEY"
 # Password your devices use to connect (entered automatically via the QR code).
 APP_TOKEN="$(openssl rand -hex 16)"
 DATA_DIR="$DATA"
 
-# Optional - see README.md
-# SPOT_PROVIDER=gold-api
-# SPOT_API_KEY=
+# Free coin catalogue - exact specs and price guides (numista.com/api)
+NUMISTA_API_KEY="$NUMISTA"
+
+# Local AI model (free, runs on this Mac through Ollama)
+OLLAMA_MODEL="qwen2.5vl:3b"
+
+# Optional, free eBay developer keys (developer.ebay.com) - current listings as comparables
 # EBAY_CLIENT_ID=
 # EBAY_CLIENT_SECRET=
-# EBAY_MARKETPLACE_INSIGHTS=false
+
+# Optional, paid: an Anthropic API key switches to Claude for better reading and web price research
+# ANTHROPIC_API_KEY=
 EOF
   chmod 600 "$CONF"
   echo "  Settings saved to $CONF"
 fi
 TOKEN=$(grep '^APP_TOKEN=' "$CONF" | cut -d= -f2- | tr -d '"')
+MODEL=$(grep '^OLLAMA_MODEL=' "$CONF" | cut -d= -f2- | tr -d '"')
+MODEL=${MODEL:-qwen2.5vl:3b}
+
+# --- Local AI (Ollama) - skipped if a paid Anthropic key is configured -----------
+ollama_up() { curl -s -m 2 "$OLLAMA_URL/api/tags" >/dev/null; }
+model_ready() { curl -s -m 5 "$OLLAMA_URL/api/tags" | grep -q "\"name\":\"$MODEL\""; }
+
+if ! grep -q '^ANTHROPIC_API_KEY=..' "$CONF"; then
+  if ! ollama_up; then
+    if [ -d "/Applications/Ollama.app" ] || [ -d "$HOME/Applications/Ollama.app" ]; then
+      echo "  Starting Ollama…"
+      open -a Ollama
+      for _ in $(seq 1 30); do ollama_up && break; sleep 1; done
+    else
+      open "https://ollama.com/download/mac"
+      fail "Silver Vault uses the free Ollama app to read your photos privately on this Mac. Its download page just opened: install it (drag it into Applications and open it once), then double-click this file again."
+    fi
+  fi
+  ollama_up || fail "Ollama didn't start. Open the Ollama app from Applications, then try again."
+  if ! model_ready; then
+    echo "  Downloading the photo-reading model ($MODEL, about 3 GB, one time only)…"
+    curl -sN "$OLLAMA_URL/api/pull" -d "{\"model\":\"$MODEL\"}" \
+      | grep --line-buffered -o '"status":"[^"]*"' \
+      | while IFS= read -r line; do s=${line#\"status\":\"}; s=${s%\"}; [ "$s" != "$last" ] && echo "    $s"; last=$s; done
+    model_ready || fail "The model download didn't finish. Check your internet connection and try again."
+  fi
+fi
 
 # --- Install / build (only when something changed) ----------------------------
 install_if_needed() {

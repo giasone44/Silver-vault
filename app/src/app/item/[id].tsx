@@ -163,7 +163,7 @@ export default function ItemScreen() {
 
       <SectionTitle>Market Report</SectionTitle>
       {valuing ? (
-        <Working title="Regulating" detail="Consulting recent sales, auction records and dealer prices. This takes about a minute." />
+        <Working title="Regulating" detail="Gathering catalogue prices, market listings and live spot." />
       ) : v ? (
         <View style={{ gap: 18 }}>
           <ValueScale

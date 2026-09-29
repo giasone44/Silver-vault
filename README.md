@@ -1,75 +1,92 @@
 # Silver Vault
 
-A private register for your silver, gold, coins, rounds and bars. Photograph both sides of a piece. Silver Vault identifies it, catalogs its full specifications, researches what it has actually sold for recently, and values your whole collection against live spot prices. It runs on your Mac, and you use it from the Mac's browser or from Safari on your iPhone.
+A private register for your silver, gold, coins, rounds and bars. It runs entirely on your Mac and **costs nothing to use**. Photograph both sides of a piece. Silver Vault reads it, catalogs its exact specifications, values it, and tracks your whole collection against live spot prices. Use it from the Mac's browser, or from Safari on your iPhone.
 
 ## What it does
 
-- **Identify from photos.** Reads year, mint and mint mark, metal, fineness, weight, fine content, diameter, catalogue number, mintage, and grade or slab details. It tells you when a closer photo is needed.
-- **Appraise from real sales.** Researches recent sold listings, auction results and dealer bid/ask prices. You get a fair value, a low–high range, and every comparable sale it used, with links.
-- **Live spot prices.** Silver, gold, platinum and palladium refresh every 30 seconds. Bullion values move with spot, keeping the premium from the last appraisal. Collector coins keep their appraised value until you refresh them.
+- **Reads your photos, privately.** A free AI model runs on your Mac through the Ollama app and reads the year, mint mark, legends, fineness stamps and slab labels. Your photos never leave your Mac.
+- **Exact specifications.** Pick the matching entry from the free Numista catalogue (the best match is chosen automatically). It fills in weight, fineness, fine content, diameter, catalogue number, designer and descriptions.
+- **Values.** Live melt value, Numista price guides for the specific year, mint and grade, and current eBay listings (optional). Every report lists its sources.
+- **Live spot prices.** Silver, gold, platinum and palladium update every 30 seconds. Bullion values move with spot.
 - **Organize.** Search by year, mint, grade, tag or storage location. Filter by type and metal, and sort by value, gain, weight, date added or name. See portfolio value, cost basis, gain, melt value, and total silver and gold ounces at a glance.
-- **Sell well.** Each piece has a shareable sell sheet. You can export everything to CSV for insurance or taxes, and refresh stale appraisals in the background.
+- **Sell well.** Each piece has a shareable sell sheet, and you can export everything to CSV for insurance or taxes.
 
-## Setup on your Mac (one time, about 15 minutes)
+## Setup on your Mac (one time, about 20 minutes)
 
-### 1. Get an Anthropic API key
-1. Sign up at **https://console.anthropic.com**.
-2. Under **Billing**, add credit. $10–20 lasts a long time: an identification costs a few cents, and an appraisal roughly 10–50 cents.
-3. Under **API Keys**, click **Create Key** and copy it. It starts with `sk-ant-`.
+Everything below is free.
 
-### 2. Install Node.js
+### 1. Install Node.js
 Download the **LTS** installer from **https://nodejs.org** and run it with the default options.
 
-### 3. Download Silver Vault
+### 2. Install Ollama (the local AI)
+Download Ollama from **https://ollama.com/download/mac**. Drag it into **Applications** and open it once, so its llama icon appears in the menu bar.
+
+### 3. Optional: get a free Numista key (recommended)
+It adds exact specifications and price guides.
+1. Create a free account at **https://en.numista.com**.
+2. Go to **https://en.numista.com/api/**, click to request an API key, and fill in the short form. Personal use is fine.
+3. Copy the key. Setup will ask for it. You can also skip it and add it later.
+
+### 4. Download Silver Vault
 On **https://github.com/giasone44/silver-vault**, click the green **Code** button, then **Download ZIP**. Move the unzipped folder into **Documents** and rename it `silver-vault`.
 
-### 4. Start it
+### 5. Start it
 Double-click **`Start Silver Vault.command`** in that folder.
 
-- **If macOS says it can't verify the file:** open  → **System Settings** → **Privacy & Security**, scroll down, click **Open Anyway** next to "Start Silver Vault.command", and confirm. You only need to do this once.
-- **On the first run** it asks for your API key, installs what it needs, and builds the app. This takes a few minutes. After that it starts in seconds.
+- **If macOS says it can't verify the file:** open  → **System Settings** → **Privacy & Security**, scroll down, click **Open Anyway**, and confirm. You only need to do this once.
+- **On the first run** it asks for your Numista key (or click **Skip**) and downloads the photo-reading model, about 3 GB. It also installs components and builds the app. Allow 10–20 minutes, depending on your internet connection. After that it starts in seconds.
 
 Silver Vault opens in your browser, already connected.
 
-### 5. Connect your iPhone
-The Terminal window shows a **QR code**. With the iPhone on the same Wi-Fi, point the **Camera** app at the code and tap the link. Safari opens Silver Vault already connected. Then tap **Share → Add to Home Screen** so it opens like an app.
+### 6. Connect your iPhone
+The Terminal window shows a **QR code**. With the iPhone on the same Wi-Fi, point the **Camera** app at it and tap the link. Then tap **Share → Add to Home Screen** so it opens like an app.
 
 ## Everyday use
 
-- **Start:** double-click `Start Silver Vault.command`. Keep its Terminal window open while you use the app; your Mac won't go to sleep while it's running.
+- **Start:** double-click `Start Silver Vault.command` and keep its Terminal window open. Your Mac won't go to sleep while it's running.
 - **Stop:** close the Terminal window, or press Control-C in it.
-- **Add a piece:** tap the gold **+**, photograph the front and back, and tap **Identify piece**. Check the details, add what you paid, and save. The appraisal runs automatically and takes about a minute.
-- **Update appraisals:** open a piece and tap **Refresh report**, or use **Settings → Refresh stale reports** to update everything older than 24 hours.
+- **Add a piece:**
+  1. Tap the gold **+** and photograph the front and back.
+  2. Tap **Identify piece**. On an 8 GB Mac this takes a minute or two.
+  3. Check the catalogue match and the details, add what you paid, and save. The valuation runs automatically.
+- **Tips for good readings:** fill the frame, use soft even light, and avoid glare. Take an extra close-up if the date or mint mark is tiny. The local model is good but not perfect, so glance over the year and mint mark before saving.
 
 ## Your data
 
-Everything is kept in the **`Silver Vault`** folder in your home folder (Finder → Go → Home):
+Everything lives in the **`Silver Vault`** folder in your home folder (Finder → Go → Home):
 
 | File | What it is |
 |---|---|
-| `vault.db` | Your collection, appraisals and price history |
+| `vault.db` | Your collection, valuations and price history |
 | `photos/` | Your photographs |
-| `config.env` | Your API key and connection password |
+| `config.env` | Your settings and optional keys |
 
-It's separate from the downloaded code, so you can replace the `silver-vault` folder with a newer download at any time without losing anything. Time Machine backs it up automatically. For an extra copy, use **Settings → Export register · CSV**.
+It's separate from the downloaded code, so you can replace the `silver-vault` folder with a newer download without losing anything. Time Machine backs it up automatically. For an extra copy, use **Settings → Export register · CSV**.
 
-## Optional extras
+To change settings later, run `open -e ~/"Silver Vault/config.env"` in Terminal, edit the file, save, and restart Silver Vault.
 
-- **Use it away from home.** Install **Tailscale** (free for personal use, https://tailscale.com) on both the Mac and the iPhone, and sign in to the same account on each. The Terminal window then also shows an "Away from home" link that works anywhere, privately. Your Mac still needs to be on.
-- **Richer eBay data.** Create a free developer account at https://developer.ebay.com and add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` to `config.env`. Current eBay listings then feed into each appraisal. To open the file, run `open -e ~/"Silver Vault/config.env"` in Terminal. Actual *sold* data from eBay's API requires eBay's approval (Marketplace Insights). Until then, sold prices come from web research.
-- **A cheaper AI model.** Add `CLAUDE_MODEL=claude-sonnet-5-5` to `config.env`.
+## Optional extras (all free)
+
+- **Use it away from home.** Install **Tailscale** (https://tailscale.com) on both the Mac and the iPhone, and sign in to the same account on each. The Terminal window then shows an "Away from home" link that works anywhere, as long as the Mac is on.
+- **eBay listings as comparables.** Create a developer account at https://developer.ebay.com, create a production keyset, and add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` to `config.env`.
+- **A stronger local model.** On a Mac with 16 GB or more memory, set `OLLAMA_MODEL="qwen2.5vl:7b"` for more accurate readings.
 
 ## How values are calculated
 
-- **Melt** = fine troy ounces × live spot.
-- **Bullion pieces:** the appraised value is adjusted live by the change in spot since the appraisal, times the fine ounces.
-- **Numismatic pieces:** the appraised value holds until the next refresh.
-- **Pieces not yet appraised** show melt value and are marked *Unvalued*.
-- Every appraisal is kept, so each piece has a value history.
+Each valuation uses the best source available, in this order:
+
+1. **Recent eBay sales.** Only used if your eBay keys have been approved for sold data.
+2. **Numista price guide** for this year, mint mark and grade. Used for collector coins.
+3. **Current eBay asking prices**, shaded down about 8%, because listings sell below their ask.
+4. **Melt value** at live spot.
+
+Values never go below melt. Bullion values then move with spot between valuations; collector coins hold their value until you tap **Refresh report**. Every report states its sources and a confidence level.
+
+**Paid upgrade (optional, not needed):** adding an Anthropic API key to `config.env` switches photo reading and valuation to Claude. That's more accurate on worn or tiny details, and it researches actual sold prices across the web.
 
 ## For developers
 
 | Path | What it is |
 |---|---|
-| `server/` | Node + TypeScript API (Hono, built-in SQLite). Holds the key and the data, and serves the web app. `npm start` reads `server/.env`; see `server/.env.example`. |
-| `app/` | Expo / React Native app for iPhone and web. Screens are in `app/src/app/`. `npm run build:web` builds the web version; `npx expo start` runs it in Expo Go. |
+| `server/` | Node + TypeScript API (Hono, built-in SQLite). Local AI via Ollama (`ollama.ts`), Numista catalogue (`numista.ts`), free valuation (`appraise.ts`), optional Claude (`ai.ts`). `npm start` reads `server/.env`. |
+| `app/` | Expo / React Native app for iPhone and web. Screens are in `app/src/app/`. `npm run build:web` builds the web version. |

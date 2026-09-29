@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, fonts } from "../lib/theme";
-import type { Category, Identification, ItemInput, ItemType, Metal } from "../lib/types";
+import type { CatalogSpecs, Category, Identification, ItemInput, ItemType, Metal } from "../lib/types";
 import { Field, Segmented, SectionTitle } from "./ui";
 
 export function emptyInput(): ItemInput {
@@ -11,7 +11,7 @@ export function emptyInput(): ItemInput {
     denomination: null, series: null, catalog_number: null, certification_service: "none",
     certification_grade: null, cert_number: null, grade: null, condition_notes: null, quantity: 1,
     purchase_price_per_unit: null, purchase_date: null, purchase_source: null, storage_location: null,
-    tags: [], notes: null, search_query: null, specs: null,
+    tags: [], notes: null, search_query: null, numista_id: null, specs: null,
   };
 }
 
@@ -42,6 +42,46 @@ export function inputFromIdentification(id: Identification, base: ItemInput = em
   };
 }
 
+function blankIdentification(v: ItemInput): Identification {
+  return {
+    name: v.name, item_type: v.item_type, category: v.category, metal: v.metal, purity: v.purity,
+    gross_weight_troy_oz: v.gross_weight_troy_oz, fine_weight_troy_oz: v.fine_weight_troy_oz, weight_grams: null,
+    diameter_mm: null, thickness_mm: null, country: v.country, mint: v.mint, mint_mark: v.mint_mark, year: v.year,
+    denomination: v.denomination, series: v.series, catalog_number: v.catalog_number, mintage: null, designer: null,
+    obverse_description: "", reverse_description: "", edge: null, certification_service: v.certification_service ?? "none",
+    certification_grade: v.certification_grade, cert_number: v.cert_number, estimated_grade: v.grade,
+    condition_notes: v.condition_notes, variety_or_error: null, search_query: v.search_query ?? v.name,
+    confidence: 1, notes_for_user: null,
+  };
+}
+
+/**
+ * Applies catalogue specifications. What was read from the photos (year, mint
+ * mark, grade, condition) is kept; physical specs come from the catalogue.
+ */
+export function inputWithCatalog(v: ItemInput, c: CatalogSpecs): ItemInput {
+  const { numista_id, catalog_title, catalog_url, weight_grams, diameter_mm, thickness_mm, obverse_description,
+    reverse_description, edge, designer, mints, ...fields } = c;
+  const specs = v.specs ?? blankIdentification(v);
+  return {
+    ...v,
+    ...fields,
+    name: v.name || catalog_title,
+    mint: v.mint ?? (mints.length === 1 ? mints[0] : null),
+    numista_id,
+    specs: {
+      ...specs,
+      weight_grams: weight_grams ?? specs.weight_grams,
+      diameter_mm: diameter_mm ?? specs.diameter_mm,
+      thickness_mm: thickness_mm ?? specs.thickness_mm,
+      obverse_description: specs.obverse_description || obverse_description || "",
+      reverse_description: specs.reverse_description || reverse_description || "",
+      edge: edge ?? specs.edge,
+      designer: designer ?? specs.designer,
+    },
+  };
+}
+
 // Numbers are edited as text so partially typed values like "0." survive.
 type Draft = Record<keyof ItemInput, string>;
 const NUMERIC = ["purity", "gross_weight_troy_oz", "fine_weight_troy_oz", "quantity", "purchase_price_per_unit"] as const;
@@ -57,7 +97,7 @@ function toDraft(v: ItemInput): Draft {
 export function fromDraft(d: Draft, base: ItemInput): ItemInput {
   const out: any = { ...base };
   for (const [k, raw] of Object.entries(d)) {
-    if (k === "specs") continue;
+    if (k === "specs" || k === "numista_id") continue;
     const s = raw.trim();
     if (k === "tags") out.tags = s ? s.split(",").map((t) => t.trim()).filter(Boolean) : [];
     else if ((NUMERIC as readonly string[]).includes(k)) {

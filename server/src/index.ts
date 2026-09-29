@@ -14,6 +14,8 @@ import { config } from "./config.js";
 import { AiError, identify } from "./ai.js";
 import * as db from "./db.js";
 import { ebayEnabled } from "./ebay.js";
+import { catalogSpecs, numistaEnabled, searchCatalog } from "./numista.js";
+import { LocalAiError, ollamaIdentify, ollamaStatus } from "./ollama.js";
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, revalueStatus, valuateItem } from "./valuate.js";
@@ -64,6 +66,7 @@ app.onError((err, c) => {
   console.error(err);
   if (err instanceof z.ZodError) return c.json({ error: "Invalid request", details: err.issues }, 400);
   if (err instanceof AiError) return c.json({ error: err.message }, 422);
+  if (err instanceof LocalAiError) return c.json({ error: err.message }, 503);
   if (err instanceof Anthropic.AuthenticationError) return c.json({ error: "Server's Anthropic API key is invalid" }, 502);
   if (err instanceof Anthropic.RateLimitError) return c.json({ error: "AI rate limit reached - try again shortly" }, 429);
   if (err instanceof Anthropic.APIError) return c.json({ error: `AI service error: ${err.message}` }, 502);
@@ -74,16 +77,21 @@ app.onError((err, c) => {
 app.use("/api/*", cors());
 app.use("/api/*", bodyLimit({ maxSize: 40 * 1024 * 1024 }));
 
-app.get("/api/health", (c) =>
-  c.json({
+app.get("/api/health", async (c) => {
+  const local = config.aiProvider === "ollama" ? await ollamaStatus() : null;
+  return c.json({
     ok: true,
-    ai: Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
+    ai_provider: config.aiProvider,
+    ai_model: config.aiProvider === "claude" ? config.claudeModel : config.ollamaModel,
+    ai: local ? local.running && local.modelReady : Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
+    ai_detail: local ? (!local.running ? "Ollama not running" : !local.modelReady ? "Model not downloaded" : "Ready") : null,
+    catalog: numistaEnabled(),
     ebay: ebayEnabled(),
     ebay_sold_data: ebayEnabled() && config.ebayInsights,
     spot_provider: config.spotProvider,
     auth_required: Boolean(config.appToken),
-  }),
-);
+  });
+});
 
 // Everything below requires the app token (header or ?t= for <img> tags).
 app.use("/api/*", async (c, next) => {
@@ -107,7 +115,22 @@ app.get("/api/spot/history", (c) => {
 
 app.post("/api/identify", async (c) => {
   const body = z.object({ obverse: Photo, reverse: Photo.nullish() }).parse(await c.req.json());
-  return c.json(await identify(body.obverse, body.reverse ?? null));
+  const reverse = body.reverse ?? null;
+  return c.json(config.aiProvider === "claude" ? await identify(body.obverse, reverse) : await ollamaIdentify(body.obverse, reverse));
+});
+
+app.get("/api/catalog/search", async (c) => {
+  if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
+  const q = c.req.query("q")?.trim();
+  if (!q) return c.json([]);
+  const kind = c.req.query("type");
+  const category = kind === "coin" ? "coin" : kind === "round" || kind === "bar" ? "exonumia" : undefined;
+  return c.json(await searchCatalog(q, category));
+});
+
+app.get("/api/catalog/:id", async (c) => {
+  if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
+  return c.json(await catalogSpecs(Number(c.req.param("id"))));
 });
 
 app.get("/api/items", (c) => c.json(db.listItems()));

@@ -110,6 +110,8 @@ export const ItemInput = z.object({
   tags: z.array(z.string()).default([]),
   notes: opt(z.string()),
   search_query: opt(z.string()),
+  /** Numista catalogue type id, used for specs and price-guide lookups. */
+  numista_id: opt(z.number()),
   specs: Identification.nullable().default(null),
 });
 export type ItemInput = z.infer<typeof ItemInput>;

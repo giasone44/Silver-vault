@@ -92,6 +92,7 @@ export type ItemInput = {
   tags: string[];
   notes: string | null;
   search_query: string | null;
+  numista_id: number | null;
   specs: Identification | null;
 };
 
@@ -117,3 +118,38 @@ export type SpotQuote = {
 };
 
 export type Photo = { base64: string; mediaType: "image/jpeg"; uri: string };
+
+export type Health = {
+  ok: boolean;
+  ai_provider: "claude" | "ollama";
+  ai_model: string;
+  ai: boolean;
+  ai_detail: string | null;
+  catalog: boolean;
+  ebay: boolean;
+  ebay_sold_data: boolean;
+  spot_provider: string;
+};
+
+export type CatalogHit = {
+  id: number;
+  title: string;
+  issuer: string | null;
+  years: string | null;
+  category: string;
+  thumbnail: string | null;
+};
+
+export type CatalogSpecs = Partial<ItemInput> & {
+  numista_id: number;
+  catalog_title: string;
+  catalog_url: string | null;
+  weight_grams: number | null;
+  diameter_mm: number | null;
+  thickness_mm: number | null;
+  obverse_description: string | null;
+  reverse_description: string | null;
+  edge: string | null;
+  designer: string | null;
+  mints: string[];
+};
