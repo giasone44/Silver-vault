@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Silver Vault",
+    "slug": "silver-vault",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.example.silvervault"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Silver Vault uses the camera to photograph your coins, rounds and bars.",
+          "photosPermission": "Silver Vault can import photos of your items from your library."
+        }
+      ]
+    ],
+    "scheme": "silvervault",
+    "backgroundColor": "#0E1116"
+  }
+}
