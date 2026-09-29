@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { MAKERS, type Maker } from "./makers.js";
 import { Dossier, Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
 import type * as z from "zod/v4";
+import * as zod from "zod/v4";
 
 // Each request is retried a couple of times by the SDK, then resilient() below
 // moves on to the next option rather than letting one busy model fail a scan.
@@ -84,6 +85,26 @@ Rules:
 - Bars and rounds: identify the refiner or private mint from its name, logo and hallmark style, and record the serial number (in condition_notes) and style (poured, extruded, struck) - these drive collector value. Well-known makers include: ${MAKERS.map((m) => m.name).join(", ")}.
 - search_query should be what a dealer would type into eBay's sold listings to find this exact item (include year, mint mark, grade/slab, refiner and style where relevant).`;
 
+// Claude's structured output allows at most 16 optional (nullable) fields per
+// schema, and Identification has 22. Ask for text fields as plain strings
+// ("" when unknown) and convert them back to null afterwards.
+const TEXT_FIELDS = [
+  "country", "mint", "mint_mark", "year", "denomination", "series", "catalog_number", "mintage", "designer", "edge",
+  "certification_grade", "cert_number", "estimated_grade", "condition_notes", "variety_or_error", "notes_for_user",
+] as const;
+export const IdentificationWire = Identification.extend(
+  Object.fromEntries(TEXT_FIELDS.map((k) => [k, zod.string().describe(`${Identification.shape[k].description ?? k}. Empty string if unknown.`)])),
+);
+
+function fromWire(raw: Record<string, unknown>): Identification {
+  const out: Record<string, unknown> = { ...raw };
+  for (const k of TEXT_FIELDS) {
+    const v = typeof out[k] === "string" ? (out[k] as string).trim() : out[k];
+    out[k] = v ? v : null;
+  }
+  return Identification.parse(out);
+}
+
 export async function identify(obverse: Photo, reverse: Photo | null): Promise<Identification> {
   const content: Anthropic.Beta.BetaContentBlockParam[] = [
     { type: "text", text: "Photo 1 - obverse (front):" },
@@ -98,18 +119,24 @@ export async function identify(obverse: Photo, reverse: Photo | null): Promise<I
   content.push({ type: "text", text: "Identify this item and catalog its full specifications." });
 
   const msg = await resilient(({ model, extra }) =>
-    client.beta.messages.parse({
+    // create() rather than parse(): the reply is checked by fromWire, which also
+    // accepts null for an unknown text field instead of rejecting the whole answer.
+    client.beta.messages.create({
       model,
       max_tokens: 16000,
       ...extra,
-      output_config: { effort: "high", format: betaZodOutputFormat(Identification) },
+      output_config: { effort: "high", format: betaZodOutputFormat(IdentificationWire) },
       system: IDENTIFY_SYSTEM,
       messages: [{ role: "user", content }],
     }),
   );
   assertNotRefused(msg);
-  if (!msg.parsed_output) throw new AiError("Could not read the identification result.");
-  return msg.parsed_output;
+  const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  try {
+    return fromWire(extractJson(text) as Record<string, unknown>);
+  } catch {
+    throw new AiError("Couldn't read Claude's answer for this piece. Please tap Identify again.");
+  }
 }
 
 const VALUE_SYSTEM = `You are a precious-metals and coin market analyst. Your job is to determine what an item is actually worth today based on what buyers have ACTUALLY PAID recently - not asking prices.

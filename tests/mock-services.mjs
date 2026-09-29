@@ -10,6 +10,14 @@ globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
     globalThis.__calls = (globalThis.__calls ?? []); globalThis.__calls.push(body.model);
     console.error("CLAUDE CALL", body.model, body.stream ? "stream" : "json", body.tools ? "tools" : "", body.output_config?.format ? "structured" : "");
+    // Mirror Claude's structured-output limit: at most 16 nullable / union-typed parameters.
+    const fmt = body.output_config?.format?.schema;
+    if (fmt) {
+      let unions = 0;
+      const walk = (o) => { if (!o || typeof o !== "object") return; if (Array.isArray(o.anyOf) || Array.isArray(o.type)) unions++; Object.values(o).forEach(walk); };
+      walk(fmt);
+      if (unions > 16) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: `Schemas contains too many parameters with union types (${unions} parameters with type arrays or anyOf).` } }), { status: 400, headers: { "content-type": "application/json" } });
+    }
     if (process.env.ALL_FAIL || (process.env.OPUS_FAIL && body.model === "claude-opus-5-5")) return new Response("upstream connect error.....", { status: 503, headers: { "content-type": "text/plain" } });
     const sys = typeof body.system === "string" ? body.system : "";
     let text;
