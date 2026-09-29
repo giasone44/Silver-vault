@@ -34,6 +34,8 @@ export function createApi(s: Settings) {
   return {
     health: () => call<{ ok: boolean; ai: boolean; ebay: boolean; ebay_sold_data: boolean; spot_provider: string }>("/api/health"),
     spot: () => call<SpotQuote>("/api/spot"),
+    spotHistory: (metal: string, hours: number) =>
+      call<{ minute: string; price: number }[]>(`/api/spot/history?metal=${metal}&hours=${hours}`),
     identify: (obverse: Photo, reverse: Photo | null) =>
       call<Identification>("/api/identify", {
         method: "POST",

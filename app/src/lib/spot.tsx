@@ -4,10 +4,15 @@ import { useApi } from "./api";
 import { useSettings } from "./settings";
 import type { SpotQuote } from "./types";
 
+export const SPOT_METALS = ["silver", "gold", "platinum", "palladium"] as const;
+export type SpotMetal = (typeof SPOT_METALS)[number];
+
 type Ctx = {
   quote: SpotQuote | null;
-  /** Silver price at the first quote this session, for the change indicator. */
-  sessionOpen: Partial<Record<"silver" | "gold", number>>;
+  /** % change vs. the oldest quote the server recorded in the last 24h (or since the app opened). */
+  change: Record<SpotMetal, number | null>;
+  /** Earliest time the change is measured from. */
+  since: string | null;
   error: string | null;
   refresh: () => Promise<void>;
 };
@@ -15,16 +20,28 @@ const SpotContext = createContext<Ctx | null>(null);
 
 export function SpotProvider({ children }: { children: ReactNode }) {
   const api = useApi();
-  const { settings, loaded } = useSettings();
+  const { settings } = useSettings();
   const [quote, setQuote] = useState<SpotQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const open = useRef<Ctx["sessionOpen"]>({});
+  const [since, setSince] = useState<string | null>(null);
+  const ref = useRef<Partial<Record<SpotMetal, number>>>({});
+
+  const loadReference = useCallback(async () => {
+    const results = await Promise.all(SPOT_METALS.map((m) => api.spotHistory(m, 24).catch(() => [])));
+    let earliest: string | null = null;
+    results.forEach((rows, i) => {
+      if (rows[0]) {
+        ref.current[SPOT_METALS[i]] = rows[0].price;
+        if (!earliest || rows[0].minute < earliest) earliest = rows[0].minute;
+      }
+    });
+    setSince(earliest);
+  }, [api]);
 
   const refresh = useCallback(async () => {
     try {
       const q = await api.spot();
-      if (open.current.silver == null && q.silver != null) open.current.silver = q.silver;
-      if (open.current.gold == null && q.gold != null) open.current.gold = q.gold;
+      for (const m of SPOT_METALS) if (ref.current[m] == null && q[m] != null) ref.current[m] = q[m]!;
       setQuote(q);
       setError(null);
     } catch (e) {
@@ -33,19 +50,26 @@ export function SpotProvider({ children }: { children: ReactNode }) {
   }, [api]);
 
   useEffect(() => {
-    if (!loaded) return;
-    void refresh();
-    const timer = setInterval(refresh, Math.max(10, settings.spotRefreshSeconds) * 1000);
+    void loadReference().then(refresh);
+    const tick = setInterval(refresh, Math.max(10, settings.spotRefreshSeconds) * 1000);
+    const refTick = setInterval(loadReference, 5 * 60_000);
     const sub = AppState.addEventListener("change", (s) => s === "active" && void refresh());
     return () => {
-      clearInterval(timer);
+      clearInterval(tick);
+      clearInterval(refTick);
       sub.remove();
     };
-  }, [loaded, refresh, settings.spotRefreshSeconds]);
+  }, [loadReference, refresh, settings.spotRefreshSeconds]);
 
-  return (
-    <SpotContext.Provider value={{ quote, sessionOpen: open.current, error, refresh }}>{children}</SpotContext.Provider>
-  );
+  const change = Object.fromEntries(
+    SPOT_METALS.map((m) => {
+      const now = quote?.[m];
+      const base = ref.current[m];
+      return [m, now != null && base ? ((now - base) / base) * 100 : null];
+    }),
+  ) as Record<SpotMetal, number | null>;
+
+  return <SpotContext.Provider value={{ quote, change, since, error, refresh }}>{children}</SpotContext.Provider>;
 }
 
 export function useSpot() {

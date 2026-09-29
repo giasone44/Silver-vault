@@ -32,7 +32,8 @@
           "cameraPermission": "Silver Vault uses the camera to photograph your coins, rounds and bars.",
           "photosPermission": "Silver Vault can import photos of your items from your library."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "silvervault",
     "backgroundColor": "#0E1116"

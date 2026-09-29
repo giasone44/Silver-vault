@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { colors, fonts } from "../lib/theme";
 import type { Category, Identification, ItemInput, ItemType, Metal } from "../lib/types";
-import { Chip, Field, SectionTitle } from "./ui";
+import { Field, Segmented, SectionTitle } from "./ui";
 
 export function emptyInput(): ItemInput {
   return {
@@ -90,9 +91,7 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
   );
   const num = { keyboardType: "decimal-pad" as const };
   const pick = <T extends string>(k: keyof ItemInput, options: [T, string][]) => (
-    <View style={styles.chips}>
-      {options.map(([v, label]) => <Chip key={v} label={label} active={draft[k] === v} onPress={() => set(k, v)} />)}
-    </View>
+    <Segmented options={options} value={draft[k] as T} onChange={(v) => set(k, v)} />
   );
 
   return (
@@ -100,9 +99,9 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
       {f("name", "Name")}
       <SectionTitle>Type</SectionTitle>
       {pick<ItemType>("item_type", [["coin", "Coin"], ["round", "Round"], ["bar", "Bar"], ["other", "Other"]])}
-      <View style={{ height: 8 }} />
+      <View style={{ height: 10 }} />
       {pick<Category>("category", [["bullion", "Bullion"], ["semi-numismatic", "Semi-numismatic"], ["numismatic", "Numismatic"]])}
-      <View style={{ height: 8 }} />
+      <View style={{ height: 10 }} />
       {pick<Metal>("metal", [["silver", "Silver"], ["gold", "Gold"], ["platinum", "Platinum"], ["palladium", "Palladium"], ["copper", "Copper"], ["other", "Other"]])}
 
       <SectionTitle>Metal content</SectionTitle>
@@ -130,7 +129,7 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
         {f("cert_number", "Cert #")}
         {f("grade", "Grade / condition")}
       </View>
-      <View style={{ height: 10 }} />
+      <View style={{ height: 18 }} />
       {f("condition_notes", "Condition notes", { multiline: true })}
 
       <SectionTitle>Ownership</SectionTitle>
@@ -142,17 +141,16 @@ export function ItemForm({ form }: { form: ReturnType<typeof useItemDraft> }) {
         {f("storage_location", "Storage location")}
         {f("tags", "Tags (comma separated)")}
       </View>
-      <View style={{ height: 10 }} />
+      <View style={{ height: 18 }} />
       {f("search_query", "Market search query")}
       <Text style={styles.help}>Used to look up recent sales. Include year, mint mark and grade.</Text>
-      <View style={{ height: 10 }} />
+      <View style={{ height: 18 }} />
       {f("notes", "Notes", { multiline: true })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  help: { color: "#8B93A1", fontSize: 11, marginTop: 4 },
+  grid: { flexDirection: "row", flexWrap: "wrap", columnGap: 18, rowGap: 18 },
+  help: { fontFamily: fonts.serifItalic, color: colors.muted, fontSize: 13, marginTop: 6 },
 });

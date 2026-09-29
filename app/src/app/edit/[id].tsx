@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { emptyInput, ItemForm, useItemDraft } from "../../components/ItemForm";
 import { PhotoPair } from "../../components/PhotoPair";
 import { Button, SectionTitle } from "../../components/ui";
+import { BalanceWheel } from "../../components/watch";
 import { useApi } from "../../lib/api";
 import { colors } from "../../lib/theme";
 import type { Item, ItemInput, Photo } from "../../lib/types";
@@ -25,7 +26,7 @@ export default function EditItem() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, id]);
 
-  if (!item) return <View style={{ flex: 1, justifyContent: "center" }}><ActivityIndicator color={colors.silver} /></View>;
+  if (!item) return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.bg }}><BalanceWheel size={56} /></View>;
 
   const save = async () => {
     setBusy(true);
@@ -39,18 +40,18 @@ export default function EditItem() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 80, width: "100%", maxWidth: 760, alignSelf: "center" }} keyboardShouldPersistTaps="handled">
-        <SectionTitle>Photos (tap to replace)</SectionTitle>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 80, width: "100%", maxWidth: 760, alignSelf: "center" }} keyboardShouldPersistTaps="handled">
+        <SectionTitle>Photographs</SectionTitle>
         <PhotoPair
           photos={photos}
           existing={{ obverse: api.photoUrl(item.obverse_photo), reverse: api.photoUrl(item.reverse_photo) }}
           onChange={(side, p) => setPhotos((s) => ({ ...s, [side]: p }))}
         />
-        <View style={{ height: 16 }} />
+        <View style={{ height: 8 }} />
         <ItemForm form={form} />
         <View style={{ height: 20 }} />
-        <Button title="Save changes" onPress={save} busy={busy} />
+        <Button title="Save amendments" onPress={save} busy={busy} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

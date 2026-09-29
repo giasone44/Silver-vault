@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Button, Card, Field, Row, SectionTitle } from "../components/ui";
+import { Reveal } from "../components/motion";
+import { Button, Field, Row, SectionTitle } from "../components/ui";
 import { createApi } from "../lib/api";
 import { useSettings } from "../lib/settings";
 import { useSpot } from "../lib/spot";
-import { colors } from "../lib/theme";
+import { colors, haptic, type } from "../lib/theme";
 
 type Health = Awaited<ReturnType<ReturnType<typeof createApi>["health"]>>;
 
@@ -37,9 +38,10 @@ export default function SettingsScreen() {
       setHealth(h);
       await save(draft());
       void refresh();
-      notify("Connected", "Settings saved.");
+      haptic.success();
     } catch (e) {
       setHealth(null);
+      haptic.error();
       notify("Connection failed", e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
@@ -50,7 +52,8 @@ export default function SettingsScreen() {
     setBusy("revalue");
     try {
       const { queued } = await createApi(draft()).revalue(24);
-      notify("Refreshing values", `${queued} item(s) older than 24h are being re-researched in the background.`);
+      haptic.success();
+      notify("Reports scheduled", `${queued} piece(s) with reports older than 24 hours are being re-researched in the background.`);
     } catch (e) {
       notify("Failed", e instanceof Error ? e.message : String(e));
     } finally {
@@ -59,39 +62,39 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      <SectionTitle>Server</SectionTitle>
-      <Card style={{ gap: 12 }}>
-        <Field label="Server URL" value={serverUrl} onChangeText={setServerUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://vault.example.com" />
-        <Field label="Access token (APP_TOKEN)" value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false} secureTextEntry />
-        <Field label="Spot refresh interval (seconds)" value={spotSeconds} onChangeText={setSpotSeconds} keyboardType="number-pad" />
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <SectionTitle>Movement</SectionTitle>
+      <View style={{ gap: 22 }}>
+        <Field label="Server address" value={serverUrl} onChangeText={setServerUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://vault.example.com" />
+        <Field label="Access token" value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false} secureTextEntry />
+        <Field label="Spot refresh · seconds" value={spotSeconds} onChangeText={setSpotSeconds} keyboardType="number-pad" />
         <Button title="Test & save" onPress={test} busy={busy === "test"} />
-      </Card>
-
-      {health && (
-        <Card style={{ marginTop: 12, paddingVertical: 4 }}>
-          <Row label="AI identification & research" value={health.ai ? "Ready" : "Missing ANTHROPIC_API_KEY"} />
-          <Row label="Spot provider" value={health.spot_provider} />
-          <Row label="eBay listings" value={health.ebay ? "Connected" : "Not configured"} />
-          <Row label="eBay sold data" value={health.ebay_sold_data ? "Connected" : "Not enabled"} />
-        </Card>
-      )}
-
-      <SectionTitle>Data</SectionTitle>
-      <View style={{ gap: 10 }}>
-        <Button title="Refresh stale market values" kind="secondary" onPress={revalue} busy={busy === "revalue"} />
-        <Button title="Export inventory (CSV)" kind="secondary" onPress={() => Linking.openURL(createApi(draft()).exportUrl())} />
       </View>
 
-      <Text style={styles.note}>
-        Spot prices refresh automatically. Bullion values move with spot using the premium found in the last market
-        research; numismatic values hold until you refresh them. Photos and data live on your server.
+      {health && (
+        <Reveal style={{ marginTop: 18 }}>
+          <Row label="Identification & research" value={<Text style={[type.body, { color: health.ai ? colors.up : colors.down }]}>{health.ai ? "Ready" : "API key missing"}</Text>} />
+          <Row label="Spot source" value={health.spot_provider} />
+          <Row label="eBay listings" value={health.ebay ? "Connected" : "Not configured"} />
+          <Row label="eBay sold data" value={health.ebay_sold_data ? "Connected" : "Not enabled"} />
+        </Reveal>
+      )}
+
+      <SectionTitle>Register</SectionTitle>
+      <View style={{ gap: 12 }}>
+        <Button title="Refresh stale reports" kind="secondary" onPress={revalue} busy={busy === "revalue"} />
+        <Button title="Export register · CSV" kind="secondary" onPress={() => Linking.openURL(createApi(draft()).exportUrl())} />
+      </View>
+
+      <Text style={[type.italic, { marginTop: 30, fontSize: 14, lineHeight: 20 }]}>
+        Spot prices are refreshed automatically. Bullion values move with spot, keeping the premium found in the most
+        recent market report; numismatic values hold until the report is refreshed. Photographs and records are kept on
+        your server.
       </Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { padding: 16, paddingBottom: 60, width: "100%", maxWidth: 760, alignSelf: "center" },
-  note: { color: colors.muted, fontSize: 12, marginTop: 24, lineHeight: 18 },
+  body: { padding: 20, paddingBottom: 60, width: "100%", maxWidth: 720, alignSelf: "center" },
 });

@@ -1,12 +1,15 @@
 import * as Clipboard from "expo-clipboard";
-import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
-import { Button, Card, Row, SectionTitle } from "../../components/ui";
+import { Alert, Linking, Platform, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { AnimatedNumber, PressableScale, Reveal } from "../../components/motion";
+import { Button, Certificate, Icon, PaperRow, Register, RegisterRow, Row, SectionTitle } from "../../components/ui";
+import { RateRecord, ValueScale } from "../../components/ValueScale";
+import { BalanceWheel, CoinFrame, Working } from "../../components/watch";
 import { useApi } from "../../lib/api";
 import { ago, money, oz, pct, typeLabel } from "../../lib/format";
 import { useSpot } from "../../lib/spot";
-import { colors, headerRightPad } from "../../lib/theme";
+import { colors, fonts, haptic, hairline, type } from "../../lib/theme";
 import type { ItemDetail, SpotQuote } from "../../lib/types";
 import { fineOz, liveValue } from "../../lib/value";
 
@@ -18,9 +21,12 @@ export default function ItemScreen() {
   const { id, autovalue } = useLocalSearchParams<{ id: string; autovalue?: string }>();
   const api = useApi();
   const { quote } = useSpot();
+  const { width: screenW } = useWindowDimensions();
+  const width = Math.min(screenW, 720) - 40;
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [valuing, setValuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [side, setSide] = useState<"Obverse" | "Reverse">("Obverse");
   const autoRan = useRef(false);
 
   const load = useCallback(async () => {
@@ -40,7 +46,9 @@ export default function ItemScreen() {
     try {
       await api.valuate(id);
       await load();
+      haptic.success();
     } catch (e) {
+      haptic.error();
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setValuing(false);
@@ -61,28 +69,32 @@ export default function ItemScreen() {
   if (!item) {
     return (
       <View style={styles.center}>
-        {error ? <Text style={{ color: colors.danger }}>{error}</Text> : <ActivityIndicator color={colors.silver} />}
+        {error ? <Text style={[type.body, { color: colors.down }]}>{error}</Text> : <BalanceWheel size={60} />}
       </View>
     );
   }
 
   const lv = liveValue(item, quote);
   const v = item.valuation;
-  const cert = item.certification_service && item.certification_service !== "none"
-    ? `${item.certification_service} ${item.certification_grade ?? ""}${item.cert_number ? ` · #${item.cert_number}` : ""}`
-    : "Raw (uncertified)";
+  const certified = item.certification_service && item.certification_service !== "none";
+  const cert = certified
+    ? `${item.certification_service} ${item.certification_grade ?? ""}`.trim()
+    : "Uncertified";
+  const heroSize = Math.min(width, 320);
+  const hasBack = Boolean(item.obverse_photo && item.reverse_photo);
 
   const confirmDelete = () => {
     const doDelete = async () => {
       await api.remove(item.id);
+      haptic.success();
       router.back();
     };
     if (Platform.OS === "web") {
-      if (window.confirm(`Delete ${item.name}?`)) void doDelete();
+      if (window.confirm(`Remove ${item.name} from the register?`)) void doDelete();
     } else {
-      Alert.alert("Delete item?", item.name, [
+      Alert.alert("Remove from register?", item.name, [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: doDelete },
+        { text: "Remove", style: "destructive", onPress: doDelete },
       ]);
     }
   };
@@ -98,173 +110,179 @@ export default function ItemScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={[styles.body, { width: width + 40 }]}>
       <Stack.Screen
         options={{
           title: "",
           headerRight: () => (
-            <Link href={{ pathname: "/edit/[id]", params: { id: item.id } }}>
-              <Text style={{ color: colors.silver, fontSize: 15, fontWeight: "600", paddingRight: headerRightPad }}>Edit</Text>
-            </Link>
+            <PressableScale onPress={() => router.push({ pathname: "/edit/[id]", params: { id: item.id } })} feedback="tap" style={{ paddingHorizontal: Platform.OS === "web" ? 16 : 0 }}>
+              <Text style={styles.headerLink}>AMEND</Text>
+            </PressableScale>
           ),
         }}
       />
-      <View style={styles.photos}>
-        {[item.obverse_photo, item.reverse_photo].map((p, i) => {
-          const uri = api.photoUrl(p);
-          return uri ? (
-            <Pressable key={i} style={{ flex: 1 }} onPress={() => Linking.openURL(uri)}>
-              <Image source={{ uri }} style={styles.photo} />
-            </Pressable>
-          ) : (
-            <View key={i} style={[styles.photo, { flex: 1, borderWidth: 1, borderColor: colors.border }]} />
-          );
-        })}
-      </View>
 
-      <Text style={styles.title}>{item.name}</Text>
-      <Text style={styles.subtitle}>
-        {[typeLabel[item.item_type], item.category, cert].join(" · ")}
-      </Text>
-
-      <Card style={{ marginTop: 16 }}>
-        <Text style={styles.label}>Current value{item.quantity > 1 ? ` (${item.quantity} pcs)` : ""}</Text>
-        <Text style={styles.big}>{money(lv.total)}</Text>
-        <Text style={styles.muted}>
-          {money(lv.unit)} each ·{" "}
-          {lv.source === "market" ? (v?.pricing_model === "bullion" ? "market premium, tracking live spot" : "market value") : "melt value only — not yet market-valued"}
-        </Text>
-        <View style={styles.grid}>
-          <Mini label="Melt / unit" value={money(lv.melt)} />
-          <Mini label="Premium" value={pct(lv.premiumPct)} />
-          <Mini label="Paid / unit" value={money(item.purchase_price_per_unit)} />
-          <Mini
-            label="Gain"
-            value={lv.gain != null ? `${money(lv.gain)} (${pct(lv.gainPct)})` : "—"}
-            color={lv.gain == null ? undefined : lv.gain >= 0 ? colors.up : colors.down}
-          />
-        </View>
-      </Card>
-
-      <SectionTitle>Market research</SectionTitle>
-      <Card>
-        {v ? (
-          <>
-            <View style={styles.grid}>
-              <Mini label="Fair value / unit" value={money(v.estimated_value_usd)} />
-              <Mini label="Range" value={`${money(v.low_usd, { whole: true })}–${money(v.high_usd, { whole: true })}`} />
-              <Mini label="Dealer buys at" value={money(v.dealer_buy_usd)} />
-              <Mini label="Dealer sells at" value={money(v.dealer_sell_usd)} />
-            </View>
-            <Text style={[styles.body2, { marginTop: 12 }]}>{v.summary}</Text>
-            {v.selling_tips && <Text style={[styles.body2, { marginTop: 8, color: colors.gold }]}>Selling: {v.selling_tips}</Text>}
-            <Text style={[styles.muted, { marginTop: 10 }]}>
-              {v.confidence} confidence · researched {ago(v.valued_at)}
-              {v.spot_at_valuation ? ` · spot then ${money(v.spot_at_valuation)}` : ""}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.body2}>
-            No market research yet. Research searches recent sold listings, auctions and dealer prices for this exact item.
-          </Text>
-        )}
-        {error && <Text style={{ color: colors.danger, marginTop: 10 }}>{error}</Text>}
-        <Button
-          title={valuing ? "Researching recent sales…" : v ? "Refresh market value" : "Research market value"}
-          onPress={valuate}
-          busy={valuing}
-          style={{ marginTop: 14 }}
+      <Reveal style={{ alignItems: "center" }}>
+        <CoinFrame
+          size={heroSize}
+          front={api.photoUrl(item.obverse_photo)}
+          back={api.photoUrl(item.reverse_photo)}
+          onTurn={(s) => setSide(s ? "Reverse" : "Obverse")}
+          placeholder={item.metal === "gold" ? "AU" : "AG"}
         />
-        {valuing && <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>This usually takes 30–90 seconds.</Text>}
-      </Card>
+        <View style={styles.flipHint}>
+          {hasBack && <Icon name="flip" size={14} color={colors.muted} />}
+          <Text style={[type.label, { fontSize: 9 }]}>{hasBack ? `${side} · tap to turn` : side}</Text>
+        </View>
+      </Reveal>
+
+      <Reveal delay={80} style={{ alignItems: "center", marginTop: 20, gap: 8 }}>
+        <Text style={[type.title, { textAlign: "center" }]}>{item.name}</Text>
+        <Text style={[type.label, { textAlign: "center" }]}>
+          {[typeLabel[item.item_type], item.category.replace("-", " "), cert].join("  ·  ")}
+        </Text>
+      </Reveal>
+
+      <Reveal delay={160} style={{ alignItems: "center", marginTop: 28 }}>
+        <Text style={type.labelGold}>{item.quantity > 1 ? `Present value · ${item.quantity} pieces` : "Present value"}</Text>
+        <AnimatedNumber value={lv.total} format={(n) => money(n)} style={[type.figureLarge, { fontSize: 46, marginTop: 6 }]} />
+        <Text style={type.italic}>
+          {money(lv.unit)} each ·{" "}
+          {lv.source === "market" ? (v?.pricing_model === "bullion" ? "market premium, tracking spot" : "collector market value") : "melt only — awaiting research"}
+        </Text>
+      </Reveal>
+
+      <Reveal delay={220} style={{ marginTop: 22 }}>
+        <RegisterRow>
+          <Register label="Melt / pc" value={money(lv.melt)} />
+          <Register label="Premium" value={pct(lv.premiumPct)} />
+          <Register label="Paid / pc" value={money(item.purchase_price_per_unit)} />
+          <Register label="Gain" value={pct(lv.gainPct)} color={lv.gain == null ? undefined : lv.gain >= 0 ? colors.up : colors.down} />
+        </RegisterRow>
+      </Reveal>
+
+      <SectionTitle>Market Report</SectionTitle>
+      {valuing ? (
+        <Working title="Regulating" detail="Consulting recent sales, auction records and dealer prices. This takes about a minute." />
+      ) : v ? (
+        <View style={{ gap: 18 }}>
+          <ValueScale
+            width={width}
+            low={v.low_usd}
+            high={v.high_usd}
+            estimate={v.estimated_value_usd}
+            marks={[
+              { value: v.melt_at_valuation, label: "MELT", color: colors.steelDim },
+              { value: v.dealer_buy_usd, label: "BID", color: colors.ivoryDim },
+              { value: v.dealer_sell_usd, label: "ASK", color: colors.ivoryDim },
+            ]}
+          />
+          <Text style={type.body}>{v.summary}</Text>
+          {v.selling_tips && (
+            <View style={styles.tip}>
+              <Text style={type.labelGold}>On selling</Text>
+              <Text style={[type.body, { marginTop: 4 }]}>{v.selling_tips}</Text>
+            </View>
+          )}
+          <Text style={[type.italic, { fontSize: 13 }]}>
+            {v.confidence[0].toUpperCase() + v.confidence.slice(1)} confidence · researched {ago(v.valued_at)}
+            {v.spot_at_valuation ? ` · spot then ${money(v.spot_at_valuation)}` : ""}
+          </Text>
+        </View>
+      ) : (
+        <Text style={[type.body, { color: colors.ivoryDim }]}>
+          Not yet researched. The report studies recent sold listings, auction results and dealer prices for this exact piece.
+        </Text>
+      )}
+      {error && <Text style={[type.body, { color: colors.down, marginTop: 12 }]}>{error}</Text>}
+      {!valuing && (
+        <Button title={v ? "Refresh report" : "Research value"} onPress={valuate} style={{ marginTop: 20 }} />
+      )}
 
       {v && v.comps.length > 0 && (
         <>
-          <SectionTitle>Comparable sales ({v.comps.length})</SectionTitle>
-          <Card style={{ paddingVertical: 4 }}>
-            {v.comps.map((c, i) => (
-              <Pressable key={i} onPress={() => c.url && Linking.openURL(c.url)} style={styles.comp}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.compTitle} numberOfLines={2}>{c.title}</Text>
-                  <Text style={styles.muted}>
-                    {KIND_LABEL[c.kind] ?? c.kind} · {c.source}{c.date ? ` · ${c.date.slice(0, 10)}` : ""}
-                  </Text>
-                </View>
-                <Text style={styles.compPrice}>{money(c.price_usd)}</Text>
-              </Pressable>
-            ))}
-          </Card>
+          <SectionTitle>Comparable Sales</SectionTitle>
+          {v.comps.map((c, i) => (
+            <PressableScale key={i} onPress={() => c.url && Linking.openURL(c.url)} feedback={c.url ? "select" : "none"} style={styles.comp}>
+              <View style={{ width: 62 }}>
+                <Text style={[type.label, { fontSize: 8, color: c.kind === "sold" || c.kind === "auction" ? colors.gold : colors.muted }]}>
+                  {KIND_LABEL[c.kind] ?? c.kind}
+                </Text>
+                <Text style={styles.compDate}>{c.date ? formatDate(c.date) : "—"}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.compTitle} numberOfLines={2}>{c.title}</Text>
+                <Text style={styles.compSource}>{c.source}{c.url ? "  ↗" : ""}</Text>
+              </View>
+              <Text style={styles.compPrice}>{money(c.price_usd)}</Text>
+            </PressableScale>
+          ))}
         </>
       )}
 
-      <SectionTitle>Specifications</SectionTitle>
-      <Card style={{ paddingVertical: 4 }}>
-        <Row label="Metal" value={item.metal} />
-        <Row label="Purity" value={item.purity != null ? String(item.purity) : null} />
-        <Row label="Fine weight" value={oz(fineOz(item))} />
-        <Row label="Gross weight" value={item.gross_weight_troy_oz != null ? oz(item.gross_weight_troy_oz) : null} />
-        <Row label="Weight (g)" value={item.specs?.weight_grams != null ? `${item.specs.weight_grams} g` : null} />
-        <Row label="Diameter" value={item.specs?.diameter_mm != null ? `${item.specs.diameter_mm} mm` : null} />
-        <Row label="Thickness" value={item.specs?.thickness_mm != null ? `${item.specs.thickness_mm} mm` : null} />
-        <Row label="Year" value={item.year} />
-        <Row label="Mint / refiner" value={item.mint} />
-        <Row label="Mint mark" value={item.mint_mark} />
-        <Row label="Country" value={item.country} />
-        <Row label="Denomination" value={item.denomination} />
-        <Row label="Series" value={item.series} />
-        <Row label="Catalog #" value={item.catalog_number} />
-        <Row label="Mintage" value={item.specs?.mintage} />
-        <Row label="Designer" value={item.specs?.designer} />
-        <Row label="Edge" value={item.specs?.edge} />
-        <Row label="Certification" value={cert} />
-        <Row label="Grade" value={item.grade} />
-        <Row label="Variety / error" value={item.specs?.variety_or_error} />
-      </Card>
-      {item.specs && (
-        <Card style={{ marginTop: 10, gap: 8 }}>
-          <Text style={styles.body2}><Text style={styles.label}>Obverse: </Text>{item.specs.obverse_description}</Text>
-          <Text style={styles.body2}><Text style={styles.label}>Reverse: </Text>{item.specs.reverse_description}</Text>
-          {item.condition_notes && <Text style={styles.body2}><Text style={styles.label}>Condition: </Text>{item.condition_notes}</Text>}
-        </Card>
-      )}
+      <View style={{ height: 34 }} />
+      <Certificate title="Certificate of Specification">
+        <PaperRow label="Metal" value={cap(item.metal)} />
+        <PaperRow label="Fineness" value={item.purity != null ? String(item.purity) : null} />
+        <PaperRow label="Fine content" value={oz(fineOz(item))} />
+        <PaperRow label="Gross weight" value={item.gross_weight_troy_oz != null ? oz(item.gross_weight_troy_oz) : null} />
+        <PaperRow label="Mass" value={item.specs?.weight_grams != null ? `${item.specs.weight_grams} g` : null} />
+        <PaperRow label="Diameter" value={item.specs?.diameter_mm != null ? `${item.specs.diameter_mm} mm` : null} />
+        <PaperRow label="Thickness" value={item.specs?.thickness_mm != null ? `${item.specs.thickness_mm} mm` : null} />
+        <PaperRow label="Year" value={item.year} />
+        <PaperRow label="Mint" value={item.mint} />
+        <PaperRow label="Mint mark" value={item.mint_mark} />
+        <PaperRow label="Country" value={item.country} />
+        <PaperRow label="Denomination" value={item.denomination} />
+        <PaperRow label="Series" value={item.series} />
+        <PaperRow label="Catalogue" value={item.catalog_number} />
+        <PaperRow label="Mintage" value={item.specs?.mintage} />
+        <PaperRow label="Designer" value={item.specs?.designer} />
+        <PaperRow label="Edge" value={item.specs?.edge} />
+        <PaperRow label="Certification" value={certified ? `${cert}${item.cert_number ? ` · No. ${item.cert_number}` : ""}` : "Uncertified"} />
+        <PaperRow label="Grade" value={item.grade} />
+        <PaperRow label="Variety" value={item.specs?.variety_or_error} />
+        {item.specs && (
+          <View style={{ marginTop: 12, gap: 8 }}>
+            <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Obverse. </Text>{item.specs.obverse_description}</Text>
+            <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Reverse. </Text>{item.specs.reverse_description}</Text>
+            {item.condition_notes && <Text style={styles.paperProse}><Text style={styles.paperProseLabel}>Condition. </Text>{item.condition_notes}</Text>}
+          </View>
+        )}
+      </Certificate>
 
-      <SectionTitle>Ownership</SectionTitle>
-      <Card style={{ paddingVertical: 4 }}>
-        <Row label="Quantity" value={String(item.quantity)} />
-        <Row label="Cost basis" value={money(lv.cost)} />
-        <Row label="Purchased" value={item.purchase_date} />
-        <Row label="From" value={item.purchase_source} />
-        <Row label="Location" value={item.storage_location} />
-        <Row label="Tags" value={item.tags.join(", ")} />
-        <Row label="Notes" value={item.notes} />
-      </Card>
+      <SectionTitle>Provenance</SectionTitle>
+      <Row label="Quantity" value={String(item.quantity)} />
+      <Row label="Cost basis" value={money(lv.cost)} />
+      <Row label="Acquired" value={item.purchase_date ? formatDate(item.purchase_date) : null} />
+      <Row label="From" value={item.purchase_source} />
+      <Row label="Kept at" value={item.storage_location} />
+      <Row label="Tags" value={item.tags.join(", ")} />
+      <Row label="Notes" value={item.notes} />
 
       {item.history.length > 1 && (
         <>
-          <SectionTitle>Valuation history</SectionTitle>
-          <Card style={{ paddingVertical: 4 }}>
-            {item.history.map((h, i) => (
-              <Row key={i} label={new Date(h.valued_at).toLocaleDateString()} value={`${money(h.estimated_value_usd)}${h.spot_at_valuation ? `  (spot ${money(h.spot_at_valuation)})` : ""}`} />
-            ))}
-          </Card>
+          <SectionTitle>Rate Record</SectionTitle>
+          <RateRecord width={width} values={[...item.history].reverse().map((h) => h.estimated_value_usd)} />
+          {item.history.slice(0, 6).map((h, i) => (
+            <Row key={i} label={formatDate(h.valued_at)} value={money(h.estimated_value_usd)} />
+          ))}
         </>
       )}
 
-      <View style={{ gap: 10, marginTop: 24 }}>
+      <View style={{ gap: 12, marginTop: 36 }}>
         <Button title="Share sell sheet" kind="secondary" onPress={shareSellSheet} />
-        <Button title="Delete item" kind="danger" onPress={confirmDelete} />
+        <Button title="Remove from register" kind="danger" onPress={confirmDelete} />
       </View>
     </ScrollView>
   );
 }
 
-function Mini({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <View style={{ width: "50%", paddingVertical: 6 }}>
-      <Text style={styles.miniLabel}>{label}</Text>
-      <Text style={[styles.miniValue, color ? { color } : null]}>{value}</Text>
-    </View>
-  );
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+function formatDate(iso: string) {
+  const d = new Date(iso.length <= 10 ? iso + "T12:00:00" : iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function sellSheet(item: ItemDetail, quote: SpotQuote | null): string {
@@ -289,27 +307,16 @@ function sellSheet(item: ItemDetail, quote: SpotQuote | null): string {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  body: { padding: 16, paddingBottom: 80, width: "100%", maxWidth: 760, alignSelf: "center" },
-  photos: { flexDirection: "row", gap: 12 },
-  photo: { width: "100%", aspectRatio: 1, borderRadius: 12, backgroundColor: colors.cardAlt },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 16 },
-  subtitle: { color: colors.muted, fontSize: 13, marginTop: 4, textTransform: "capitalize" },
-  label: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  big: { color: colors.text, fontSize: 32, fontWeight: "800", fontVariant: ["tabular-nums"], marginVertical: 2 },
-  muted: { color: colors.muted, fontSize: 12 },
-  body2: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  grid: { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
-  miniLabel: { color: colors.muted, fontSize: 11 },
-  miniValue: { color: colors.text, fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  comp: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  compTitle: { color: colors.text, fontSize: 13, fontWeight: "600" },
-  compPrice: { color: colors.text, fontSize: 15, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+  body: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 80, alignSelf: "center" },
+  headerLink: { color: colors.gold, fontFamily: fonts.engraved, fontSize: 11, letterSpacing: 2 },
+  flipHint: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12 },
+  tip: { borderLeftWidth: 1, borderLeftColor: colors.gold, paddingLeft: 14 },
+  comp: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: hairline, borderBottomColor: colors.hairline },
+  compDate: { fontFamily: fonts.serifItalic, color: colors.ivoryDim, fontSize: 12, marginTop: 2 },
+  compTitle: { fontFamily: fonts.serif, color: colors.ivory, fontSize: 15, lineHeight: 18 },
+  compSource: { fontFamily: fonts.serifItalic, color: colors.muted, fontSize: 12, marginTop: 2 },
+  compPrice: { fontFamily: fonts.numeral, color: colors.ivory, fontSize: 15, fontVariant: ["lining-nums", "tabular-nums"] },
+  paperProse: { fontFamily: fonts.serif, color: colors.ink, fontSize: 15, lineHeight: 20 },
+  paperProseLabel: { fontFamily: fonts.serifBold, color: colors.ink },
 });

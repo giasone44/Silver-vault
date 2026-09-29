@@ -2,10 +2,12 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { emptyInput, inputFromIdentification, ItemForm, useItemDraft } from "../components/ItemForm";
+import { Reveal } from "../components/motion";
 import { PhotoPair } from "../components/PhotoPair";
-import { Button, Card } from "../components/ui";
+import { Button } from "../components/ui";
+import { Subdial, Working } from "../components/watch";
 import { useApi } from "../lib/api";
-import { colors } from "../lib/theme";
+import { colors, fonts, haptic, hairline, type } from "../lib/theme";
 import type { Identification, Photo } from "../lib/types";
 
 export default function AddItem() {
@@ -24,7 +26,9 @@ export default function AddItem() {
       setIdent(result);
       form.reset(inputFromIdentification(result, form.value()));
       setShowForm(true);
+      haptic.success();
     } catch (e) {
+      haptic.error();
       Alert.alert("Couldn't identify", e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
@@ -33,10 +37,11 @@ export default function AddItem() {
 
   const save = async () => {
     const input = form.value();
-    if (!input.name) return Alert.alert("Name required", "Give the item a name.");
+    if (!input.name) return Alert.alert("Name required", "Give the piece a name.");
     setBusy("save");
     try {
       const item = await api.create(input, photos.obverse, photos.reverse);
+      haptic.success();
       router.replace({ pathname: "/item/[id]", params: { id: item.id, autovalue: "1" } });
     } catch (e) {
       Alert.alert("Save failed", e instanceof Error ? e.message : String(e));
@@ -45,45 +50,72 @@ export default function AddItem() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={styles.h}>1. Photograph both sides</Text>
-        <Text style={styles.p}>
-          Fill the frame, use even light, avoid glare. For slabs, make sure the label is readable.
-        </Text>
+        <Step numeral="I" title="Photograph both faces" note="Fill the frame, soft even light, no glare. For slabs, keep the label legible." />
         <PhotoPair photos={photos} onChange={(side, p) => setPhotos((s) => ({ ...s, [side]: p }))} />
-        <View style={{ height: 14 }} />
-        <Button title={ident ? "Identify again" : "Identify with AI"} onPress={runIdentify} busy={busy === "identify"} disabled={!photos.obverse} />
-        {busy === "identify" && <Text style={[styles.p, { textAlign: "center", marginTop: 8 }]}>Reading legends, dates and mint marks…</Text>}
-        {!showForm && (
-          <Button title="Skip — enter details manually" kind="secondary" onPress={() => setShowForm(true)} style={{ marginTop: 10 }} />
-        )}
+
+        <View style={{ marginTop: 24 }}>
+          {busy === "identify" ? (
+            <Working title="Examining" detail="Reading legends, dates, mint marks and hallmarks…" />
+          ) : (
+            <Button title={ident ? "Examine again" : "Identify piece"} onPress={runIdentify} disabled={!photos.obverse} />
+          )}
+          {!showForm && busy !== "identify" && (
+            <Button title="Enter details by hand" kind="secondary" onPress={() => setShowForm(true)} style={{ marginTop: 12 }} />
+          )}
+        </View>
 
         {ident && (
-          <Card style={{ marginTop: 16, gap: 6 }}>
-            <Text style={{ color: colors.text, fontWeight: "700" }}>
-              Identified with {Math.round(ident.confidence * 100)}% confidence
-            </Text>
-            {ident.notes_for_user && <Text style={{ color: colors.gold }}>{ident.notes_for_user}</Text>}
-            <Text style={styles.p}>Review and correct anything below, then add what you paid.</Text>
-          </Card>
+          <Reveal style={styles.verdict}>
+            <Subdial size={70} symbol="CERT." change={ident.confidence * 6 - 3} accent={colors.goldBright} ends={["0", "100"]} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={type.labelGold}>Identified · {Math.round(ident.confidence * 100)}% confidence</Text>
+              <Text style={type.heading}>{ident.name}</Text>
+              {ident.notes_for_user && <Text style={[type.italic, { color: colors.goldBright }]}>{ident.notes_for_user}</Text>}
+            </View>
+          </Reveal>
         )}
 
         {showForm && (
-          <>
-            <Text style={[styles.h, { marginTop: 24 }]}>2. Confirm details</Text>
+          <Reveal>
+            <Step numeral="II" title="Verify the record" note="Correct anything the examination missed, then add what you paid." />
             <ItemForm form={form} />
-            <View style={{ height: 20 }} />
-            <Button title="Save & get market value" onPress={save} busy={busy === "save"} />
-          </>
+            <Button title="Enter into register" onPress={save} busy={busy === "save"} style={{ marginTop: 30 }} />
+            <Text style={[type.italic, { textAlign: "center", marginTop: 10, fontSize: 13 }]}>
+              A market report will be prepared as soon as it is saved.
+            </Text>
+          </Reveal>
         )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+function Step({ numeral, title, note }: { numeral: string; title: string; note: string }) {
+  return (
+    <View style={styles.step}>
+      <Text style={styles.numeral}>{numeral}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={type.heading}>{title}</Text>
+        <Text style={[type.italic, { marginTop: 2 }]}>{note}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  body: { padding: 16, paddingBottom: 80, width: "100%", maxWidth: 760, alignSelf: "center" },
-  h: { color: colors.text, fontSize: 18, fontWeight: "800", marginBottom: 6 },
-  p: { color: colors.muted, fontSize: 13, marginBottom: 12 },
+  body: { paddingHorizontal: 20, paddingTop: 0, paddingBottom: 80, width: "100%", maxWidth: 720, alignSelf: "center" },
+  step: { flexDirection: "row", gap: 14, alignItems: "flex-start", marginTop: 34, marginBottom: 22 },
+  numeral: { fontFamily: fonts.engravedBold, color: colors.gold, fontSize: 22, width: 34, textAlign: "center", marginTop: -2 },
+  verdict: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "center",
+    marginTop: 26,
+    paddingVertical: 16,
+    borderTopWidth: hairline,
+    borderBottomWidth: hairline,
+    borderColor: colors.hairlineStrong,
+  },
 });
