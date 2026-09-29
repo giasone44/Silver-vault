@@ -6,8 +6,10 @@ import { MAKERS, type Maker } from "./makers.js";
 import { Dossier, Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
 import type * as z from "zod/v4";
 
-// Anthropic is occasionally briefly overloaded; retry a few times before giving up.
-const MAX_RETRIES = 5;
+// Each request is retried a couple of times by the SDK, then resilient() below
+// moves on to the next option rather than letting one busy model fail a scan.
+const MAX_RETRIES = 2;
+const BACKUP_MODEL = "claude-sonnet-5-5";
 let client = new Anthropic({ maxRetries: MAX_RETRIES });
 
 /** Switches to a new API key without restarting (set from the app's Settings screen). */
@@ -35,6 +37,35 @@ const FALLBACK: { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" } 
 };
 
 export class AiError extends Error {}
+
+type Attempt = { model: string; extra: Partial<typeof FALLBACK> };
+
+/**
+ * Runs a Claude request, falling back when Anthropic is busy or a request
+ * option is rejected: first the configured model with server-side fallbacks,
+ * then the same model without that beta option, then a second model.
+ */
+async function resilient<T>(run: (a: Attempt) => Promise<T>): Promise<T> {
+  const attempts: Attempt[] = [
+    { model: config.claudeModel, extra: FALLBACK },
+    { model: config.claudeModel, extra: {} },
+    { model: BACKUP_MODEL, extra: {} },
+  ];
+  let last: unknown;
+  for (const attempt of attempts) {
+    try {
+      return await run(attempt);
+    } catch (err) {
+      last = err;
+      if (!(err instanceof Anthropic.APIError)) throw err;
+      const status = err.status ?? 0; // 0 = connection problem
+      const optionRejected = status === 400 && /fallback|beta/i.test(err.message);
+      if (!(status === 0 || status === 429 || status >= 500 || optionRejected)) throw err;
+      console.warn(`Claude ${attempt.model} unavailable (${status || "connection"}): trying the next option`);
+    }
+  }
+  throw last;
+}
 
 function assertNotRefused(msg: BetaMessage) {
   if (msg.stop_reason === "refusal") throw new AiError("The model declined this request. Try different photos.");
@@ -66,14 +97,16 @@ export async function identify(obverse: Photo, reverse: Photo | null): Promise<I
   }
   content.push({ type: "text", text: "Identify this item and catalog its full specifications." });
 
-  const msg = await client.beta.messages.parse({
-    model: config.claudeModel,
-    max_tokens: 16000,
-    ...FALLBACK,
-    output_config: { effort: "high", format: betaZodOutputFormat(Identification) },
-    system: IDENTIFY_SYSTEM,
-    messages: [{ role: "user", content }],
-  });
+  const msg = await resilient(({ model, extra }) =>
+    client.beta.messages.parse({
+      model,
+      max_tokens: 16000,
+      ...extra,
+      output_config: { effort: "high", format: betaZodOutputFormat(Identification) },
+      system: IDENTIFY_SYSTEM,
+      messages: [{ role: "user", content }],
+    }),
+  );
   assertNotRefused(msg);
   if (!msg.parsed_output) throw new AiError("Could not read the identification result.");
   return msg.parsed_output;
@@ -174,45 +207,41 @@ async function webResearch<T extends z.ZodType>(
     { type: "web_search_20260209", name: "web_search", max_uses: limits.searches },
     { type: "web_fetch_20260209", name: "web_fetch", max_uses: limits.fetches },
   ];
-  const messages: BetaMessageParam[] = [{ role: "user", content: prompt }];
-
-  let msg: BetaMessage | undefined;
-  // Server-side tool loops can pause; resume by sending the paused turn back.
-  for (let i = 0; i < 5; i++) {
-    // Streamed so long research turns don't hit HTTP timeouts.
-    msg = await client.beta.messages
-      .stream({
-        model: config.claudeModel,
-        max_tokens: 32000,
-        ...FALLBACK,
-        output_config: { effort: "high" },
-        system,
-        tools,
-        messages,
-      })
-      .finalMessage();
-    assertNotRefused(msg);
-    if (msg.stop_reason !== "pause_turn") break;
-    messages.push({ role: "assistant", content: msg.content });
-  }
-  if (!msg) throw new AiError("No response from model.");
+  const msg = await resilient(async ({ model, extra }) => {
+    const messages: BetaMessageParam[] = [{ role: "user", content: prompt }];
+    let m: BetaMessage | undefined;
+    // Server-side tool loops can pause; resume by sending the paused turn back.
+    for (let i = 0; i < 5; i++) {
+      // Streamed so long research turns don't hit HTTP timeouts.
+      m = await client.beta.messages
+        .stream({ model, max_tokens: 32000, ...extra, output_config: { effort: "high" }, system, tools, messages })
+        .finalMessage();
+      assertNotRefused(m);
+      if (m.stop_reason !== "pause_turn") break;
+      messages.push({ role: "assistant", content: m.content });
+    }
+    if (!m) throw new AiError("No response from model.");
+    return m;
+  });
 
   const lastText = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("\n");
   const direct = schema.safeParse((() => { try { return extractJson(lastText); } catch { return null; } })());
   if (direct.success) return direct.data;
 
-  const structured = await client.beta.messages.parse({
-    model: config.claudeModel,
-    max_tokens: 16000,
-    ...FALLBACK,
-    output_config: { effort: "low", format: betaZodOutputFormat(schema) },
-    messages: [
-      {
-        role: "user",
-        content: `Convert this ${what} into the required structure. Keep every fact and source; do not invent anything that is not stated.\n\n${lastText}`,
-      },
-    ],
-  });
+  const structured = await resilient(({ model, extra }) =>
+    client.beta.messages.parse({
+      model,
+      max_tokens: 16000,
+      ...extra,
+      output_config: { effort: "low", format: betaZodOutputFormat(schema) },
+      messages: [
+        {
+          role: "user",
+          content: `Convert this ${what} into the required structure. Keep every fact and source; do not invent anything that is not stated.\n\n${lastText}`,
+        },
+      ],
+    }),
+  );
   assertNotRefused(structured);
   if (!structured.parsed_output) throw new AiError(`Could not read the ${what} result.`);
   return structured.parsed_output as z.infer<T>;
