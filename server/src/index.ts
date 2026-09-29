@@ -16,7 +16,7 @@ import * as db from "./db.js";
 import { ebayEnabled } from "./ebay.js";
 import { MAKERS, matchMaker } from "./makers.js";
 import { catalogIssues, catalogSpecs, numistaEnabled, searchCatalog } from "./numista.js";
-import { LocalAiError, ollamaIdentify, ollamaStatus } from "./ollama.js";
+import { LocalAiError, ollamaIdentify, ollamaStatus, warmUp } from "./ollama.js";
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, revalueStatus, valuateItem } from "./valuate.js";
@@ -131,6 +131,12 @@ app.post("/api/identify", async (c) => {
 });
 
 app.get("/api/makers", (c) => c.json(MAKERS));
+
+// The app calls this when the add screen opens, so the model is loaded before the photos arrive.
+app.post("/api/warmup", (c) => {
+  if (config.aiProvider === "ollama") void warmUp();
+  return c.json({ ok: true });
+});
 
 app.get("/api/catalog/search", async (c) => {
   if (!numistaEnabled()) return c.json({ error: "Catalogue not connected - add a free Numista API key." }, 400);
@@ -257,6 +263,7 @@ function reachableAddresses() {
 }
 
 serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
+  if (config.aiProvider === "ollama") void warmUp();
   const { lan, tailscale } = reachableAddresses();
   const link = (host: string) => `http://${host}:${info.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
   console.log(`\n  Silver Vault is running.\n\n  On this Mac:  http://localhost:${info.port}`);

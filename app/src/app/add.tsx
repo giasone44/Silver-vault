@@ -24,13 +24,15 @@ export default function AddItem() {
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => {});
+    // Load the AI model now, while photos are being taken, so identifying starts straight away.
+    api.warmup().catch(() => {});
   }, [api]);
 
   const runIdentify = async () => {
     if (!photos.obverse) return;
     setBusy("identify");
     try {
-      const result = await api.identify(photos.obverse, photos.reverse);
+      const result = await api.identify(photos.obverse, photos.reverse, local);
       setIdent(result);
       form.reset(inputFromIdentification(result, form.value()));
       setShowForm(true);
@@ -67,7 +69,8 @@ export default function AddItem() {
           {busy === "identify" ? (
             <Working
               title="Examining"
-              detail={local ? "Reading legends, dates and mint marks on your Mac. This can take a minute or two." : "Reading legends, dates, mint marks and hallmarks…"}
+              detail="Reading legends, dates and mint marks…"
+              timer
             />
           ) : (
             <Button title={ident ? "Examine again" : "Identify piece"} onPress={runIdentify} disabled={!photos.obverse} />

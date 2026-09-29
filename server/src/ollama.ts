@@ -1,32 +1,59 @@
 import * as z from "zod/v4";
 import { config } from "./config.js";
 import { MAKERS } from "./makers.js";
-import { Identification } from "./schemas.js";
+import type { Identification } from "./schemas.js";
 
 // Free, private photo identification with a vision model running on this Mac
-// through Ollama (ollama.com). Small models read legends and dates well but
-// know less about exact specifications, so the catalogue lookup (numista.ts)
-// fills those in afterwards.
+// through Ollama (ollama.com). Kept deliberately lean for 8 GB Macs:
+//  - the model only transcribes what it can read (no long descriptions);
+//    exact specifications come from the Numista catalogue afterwards,
+//  - photos arrive downscaled by the app,
+//  - the model stays loaded between pieces instead of reloading each time.
 
 export class LocalAiError extends Error {}
 
 type Photo = { base64: string };
 
-const SYSTEM = `You are an expert numismatist cataloguing coins, bullion rounds and bars from photographs.
-Read every word, number, date, mint mark, hallmark, fineness stamp and slab label that is visible. Copy text exactly as printed.
-Rules:
-- item_type: "coin" if issued by a government with a denomination, "round" for private round bullion, "bar" for rectangular ingots.
-- category: "bullion" if it trades mainly for metal content, "numismatic" for collector coins, "semi-numismatic" in between.
-- purity as a decimal (0.999, 0.9999, 0.900). Weights in troy ounces. If a weight like "1 OZ" or "10 OZ" is stamped, use it.
-- For graded slabs, copy the grading service, grade and certification number from the label.
-- Use null for anything you cannot see or do not know. Never guess a mint mark or year you cannot read.
-- mint: the issuing mint or refiner. Look for maker names and logos such as: ${MAKERS.map((m) => m.name).join(", ")}.
-  On bars, the maker's name or logo and a serial number are usually stamped on the face.
-- search_query: the words a collector would type to find this exact item, e.g. "1881-S Morgan Dollar" or "10 oz Engelhard silver bar".
-- confidence: 0 to 1.
-- notes_for_user: what is unclear and which closer photo would help, or null.`;
+/** How long Ollama keeps the model in memory after a request. */
+const KEEP_ALIVE = "30m";
 
-const schema = z.toJSONSchema(Identification);
+/** Only what can be read from the photos; everything else comes from the catalogue. */
+const LocalReading = z.object({
+  name: z.string(),
+  item_type: z.enum(["coin", "round", "bar", "other"]),
+  category: z.enum(["bullion", "semi-numismatic", "numismatic"]),
+  metal: z.enum(["silver", "gold", "platinum", "palladium", "copper", "other"]),
+  purity: z.number().nullable(),
+  weight_troy_oz: z.number().nullable(),
+  year: z.string().nullable(),
+  mint: z.string().nullable(),
+  mint_mark: z.string().nullable(),
+  country: z.string().nullable(),
+  denomination: z.string().nullable(),
+  serial_number: z.string().nullable(),
+  certification_service: z.enum(["none", "PCGS", "NGC", "ANACS", "ICG", "CAC", "other"]),
+  certification_grade: z.string().nullable(),
+  cert_number: z.string().nullable(),
+  estimated_grade: z.string().nullable(),
+  condition: z.string().nullable(),
+  search_query: z.string(),
+  confidence: z.number(),
+  unclear: z.string().nullable(),
+});
+type LocalReading = z.infer<typeof LocalReading>;
+
+const schema = z.toJSONSchema(LocalReading);
+
+const SYSTEM = `You catalogue coins, bullion rounds and bars from photos. Copy printed text exactly. Be brief.
+- item_type: coin (government issue with a denomination), round (private round), bar (ingot).
+- category: bullion (valued for metal), numismatic (collector coin), semi-numismatic (in between).
+- purity as a decimal (0.999). weight_troy_oz from the stamp, e.g. "1 OZ" -> 1, "10 OZ" -> 10.
+- mint: the mint or refiner. Known makers include: ${MAKERS.map((m) => m.name).join(", ")}.
+- serial_number: stamped on many bars.
+- Slabs: copy grading service, grade and cert number from the label.
+- Use null for anything unreadable. Never guess a year or mint mark.
+- search_query: short collector search, e.g. "1881-S Morgan Dollar" or "10 oz Engelhard silver bar".
+- condition: a few words at most. unclear: what a closer photo would fix, or null.`;
 
 async function ollama(path: string, init?: RequestInit) {
   try {
@@ -47,6 +74,53 @@ export async function ollamaStatus(): Promise<{ running: boolean; modelReady: bo
   }
 }
 
+/** Loads the model into memory ahead of time so the first identification doesn't wait for it. */
+export async function warmUp(): Promise<void> {
+  await fetch(`${config.ollamaUrl}/api/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: config.ollamaModel, keep_alive: KEEP_ALIVE }),
+  })
+    .then((r) => r.body?.cancel())
+    .catch(() => {});
+}
+
+function toIdentification(r: LocalReading): Identification {
+  return {
+    name: r.name,
+    item_type: r.item_type,
+    category: r.category,
+    metal: r.metal,
+    purity: r.purity,
+    gross_weight_troy_oz: r.weight_troy_oz,
+    fine_weight_troy_oz: r.weight_troy_oz != null && r.purity != null ? Number((r.weight_troy_oz * r.purity).toFixed(4)) : null,
+    weight_grams: null,
+    diameter_mm: null,
+    thickness_mm: null,
+    country: r.country,
+    mint: r.mint,
+    mint_mark: r.mint_mark,
+    year: r.year,
+    denomination: r.denomination,
+    series: null,
+    catalog_number: null,
+    mintage: null,
+    designer: null,
+    obverse_description: "",
+    reverse_description: "",
+    edge: null,
+    certification_service: r.certification_service,
+    certification_grade: r.certification_grade,
+    cert_number: r.cert_number,
+    estimated_grade: r.estimated_grade,
+    condition_notes: [r.condition, r.serial_number && `Serial no. ${r.serial_number}`].filter(Boolean).join(". ") || null,
+    variety_or_error: null,
+    search_query: r.search_query,
+    confidence: r.confidence,
+    notes_for_user: r.unclear,
+  };
+}
+
 export async function ollamaIdentify(obverse: Photo, reverse: Photo | null): Promise<Identification> {
   const res = await ollama("/api/chat", {
     method: "POST",
@@ -54,15 +128,14 @@ export async function ollamaIdentify(obverse: Photo, reverse: Photo | null): Pro
     body: JSON.stringify({
       model: config.ollamaModel,
       stream: true, // streamed so slow Macs don't hit HTTP header timeouts
+      keep_alive: KEEP_ALIVE,
       format: schema,
-      options: { temperature: 0, num_ctx: 8192 },
+      options: { temperature: 0, num_ctx: 4096, num_predict: 600 },
       messages: [
         { role: "system", content: SYSTEM },
         {
           role: "user",
-          content: reverse
-            ? "Image 1 is the obverse (front), image 2 is the reverse (back). Catalogue this item as JSON."
-            : "This image is the obverse (front). Catalogue this item as JSON.",
+          content: reverse ? "Image 1: obverse. Image 2: reverse. Catalogue this item." : "Obverse. Catalogue this item.",
           images: reverse ? [obverse.base64, reverse.base64] : [obverse.base64],
         },
       ],
@@ -96,7 +169,7 @@ export async function ollamaIdentify(obverse: Photo, reverse: Photo | null): Pro
   } catch {
     throw new LocalAiError("The local AI returned an unreadable answer. Try again, or use closer photos.");
   }
-  const parsed = Identification.safeParse(raw);
-  if (parsed.success) return parsed.data;
+  const parsed = LocalReading.safeParse(raw);
+  if (parsed.success) return toIdentification(parsed.data);
   throw new LocalAiError("The local AI's answer was incomplete. Try again, or enter the details by hand.");
 }

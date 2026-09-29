@@ -302,12 +302,24 @@ export function BalanceWheel({ size = 72 }: { size?: number }) {
   );
 }
 
-export function Working({ title, detail }: { title: string; detail?: string }) {
+export function Working({ title, detail, timer }: { title: string; detail?: string; timer?: boolean }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!timer) return;
+    const started = Date.now();
+    const id = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [timer]);
   return (
     <View style={{ alignItems: "center", gap: 10, paddingVertical: 16 }}>
       <BalanceWheel />
       <Text style={[type.labelGold, { letterSpacing: 3 }]}>{title}</Text>
       {detail && <Text style={[type.italic, { textAlign: "center" }]}>{detail}</Text>}
+      {timer && (
+        <Text style={[type.figure, { fontSize: 15, color: colors.ivoryDim }]}>
+          {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+        </Text>
+      )}
     </View>
   );
 }

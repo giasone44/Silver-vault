@@ -42,11 +42,16 @@ export function createApi(s: Settings) {
     spot: () => call<SpotQuote>("/api/spot"),
     spotHistory: (metal: string, hours: number) =>
       call<{ minute: string; price: number }[]>(`/api/spot/history?metal=${metal}&hours=${hours}`),
-    identify: (obverse: Photo, reverse: Photo | null) =>
-      call<Identification>("/api/identify", {
+    /** `small` sends the reduced copies, which the local AI reads far faster. */
+    identify: (obverse: Photo, reverse: Photo | null, small = false) => {
+      const pick = (p: Photo | null) =>
+        p ? { base64: small && p.aiBase64 ? p.aiBase64 : p.base64, mediaType: p.mediaType } : null;
+      return call<Identification>("/api/identify", {
         method: "POST",
-        body: JSON.stringify({ obverse: upload(obverse), reverse: upload(reverse) }),
-      }),
+        body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse) }),
+      });
+    },
+    warmup: () => call<{ ok: true }>("/api/warmup", { method: "POST" }),
     items: () => call<Item[]>("/api/items"),
     item: (id: string) => call<ItemDetail>(`/api/items/${id}`),
     create: (item: ItemInput, obverse?: Photo | null, reverse?: Photo | null) =>

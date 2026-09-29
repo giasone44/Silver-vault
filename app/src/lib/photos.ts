@@ -3,19 +3,25 @@ import * as ImagePicker from "expo-image-picker";
 import { Alert, Platform } from "react-native";
 import type { Photo } from "./types";
 
-// Enough to read dates and mint marks, small enough for a local model on an 8 GB Mac.
-const MAX_EDGE = 1280;
+/** Saved photo: sharp enough to zoom in on dates and mint marks later. */
+const SAVE_EDGE = 1280;
+/** Copy the AI reads. Vision models slow down steeply with image size; this is plenty for legends and dates. */
+const AI_EDGE = 768;
 
-/** Downscale to keep uploads small while leaving enough detail to read dates and mint marks. */
-async function toPhoto(asset: ImagePicker.ImagePickerAsset): Promise<Photo> {
+async function encode(asset: ImagePicker.ImagePickerAsset, edge: number, compress: number) {
   const ctx = ImageManipulator.manipulate(asset.uri);
-  if (Math.max(asset.width, asset.height) > MAX_EDGE) {
-    ctx.resize(asset.width >= asset.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+  if (Math.max(asset.width, asset.height) > edge) {
+    ctx.resize(asset.width >= asset.height ? { width: edge } : { height: edge });
   }
   const ref = await ctx.renderAsync();
-  const out = await ref.saveAsync({ format: SaveFormat.JPEG, compress: 0.85, base64: true });
+  const out = await ref.saveAsync({ format: SaveFormat.JPEG, compress, base64: true });
   if (!out.base64) throw new Error("Could not encode photo");
-  return { uri: out.uri, base64: out.base64, mediaType: "image/jpeg" };
+  return out;
+}
+
+async function toPhoto(asset: ImagePicker.ImagePickerAsset): Promise<Photo> {
+  const [full, small] = await Promise.all([encode(asset, SAVE_EDGE, 0.85), encode(asset, AI_EDGE, 0.8)]);
+  return { uri: full.uri, base64: full.base64!, aiBase64: small.base64!, mediaType: "image/jpeg" };
 }
 
 export async function capturePhoto(source: "camera" | "library"): Promise<Photo | null> {

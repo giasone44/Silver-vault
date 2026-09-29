@@ -117,7 +117,13 @@ export type SpotQuote = {
   fetched_at: string;
 };
 
-export type Photo = { base64: string; mediaType: "image/jpeg"; uri: string };
+export type Photo = {
+  base64: string;
+  /** Smaller copy sent to the AI for reading. */
+  aiBase64?: string;
+  mediaType: "image/jpeg";
+  uri: string;
+};
 
 export type Health = {
   ok: boolean;
