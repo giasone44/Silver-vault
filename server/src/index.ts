@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
@@ -8,6 +9,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import * as z from "zod/v4";
 import Anthropic from "@anthropic-ai/sdk";
+import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
 import { AiError, identify } from "./ai.js";
 import * as db from "./db.js";
@@ -200,6 +202,28 @@ if (fs.existsSync(config.webDistDir)) {
 }
 
 if (!config.appToken) console.warn("WARNING: APP_TOKEN is not set - the API is open to anyone who can reach it.");
-serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) =>
-  console.log(`Silver Vault server listening on http://localhost:${info.port}`),
-);
+/** IPv4 addresses other devices can reach: home Wi-Fi/LAN, and Tailscale (100.x) if installed. */
+function reachableAddresses() {
+  const lan: string[] = [];
+  const tailscale: string[] = [];
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family !== "IPv4" || a.internal) continue;
+      (a.address.startsWith("100.") ? tailscale : lan).push(a.address);
+    }
+  }
+  return { lan, tailscale };
+}
+
+serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
+  const { lan, tailscale } = reachableAddresses();
+  const link = (host: string) => `http://${host}:${info.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
+  console.log(`\n  Silver Vault is running.\n\n  On this Mac:  http://localhost:${info.port}`);
+  if (lan[0]) {
+    console.log(`\n  On your iPhone (same Wi-Fi): point the Camera app at this code and tap the link.\n`);
+    qrcode.generate(link(lan[0]), { small: true }, (qr) => console.log(qr.replace(/^/gm, "  ")));
+    console.log(`  ${link(lan[0])}`);
+  }
+  if (tailscale[0]) console.log(`\n  Away from home (Tailscale):  ${link(tailscale[0])}`);
+  console.log(`\n  Keep this window open while you use Silver Vault. Press Control-C to stop.\n`);
+});

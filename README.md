@@ -1,94 +1,75 @@
 # Silver Vault
 
-Photograph both sides of a coin, round or bar. Silver Vault identifies it, catalogs its full specifications, researches what it has actually sold for recently, and values your whole inventory against live spot prices. It runs on iPhone and in a desktop browser, and both see the same data.
-
-```
- iPhone app (Expo)  ─┐
-                     ├──►  Silver Vault server  ──►  Claude (photo ID + sold-price research)
- Desktop browser  ───┘     (your data + photos)  ──►  Spot price API (refreshed every 30 s)
-                                                 ──►  eBay API (optional)
-```
+A private register for your silver, gold, coins, rounds and bars. Photograph both sides of a piece. Silver Vault identifies it, catalogs its full specifications, researches what it has actually sold for recently, and values your whole collection against live spot prices. It runs on your Mac, and you use it from the Mac's browser or from Safari on your iPhone.
 
 ## What it does
 
-- **Photo identification.** Takes the obverse and reverse photos and returns name, year, mint and mint mark, metal, purity, gross and fine weight, diameter, catalog number, mintage, and a description of each side. For slabs it reads the grading service, grade and cert number. For raw coins it gives an estimated grade and condition notes. It also tells you when a better photo is needed, for example "mint mark not visible".
-- **Market value from actual sales.** Searches recent sold listings, auction records and dealer buy/sell prices for that exact item. It returns a fair value, a low–high range, dealer bid and ask, a confidence level, and every comparable sale it used, each with a link.
-- **Live spot pricing.** Silver, gold, platinum and palladium prices refresh automatically. Bullion values move with spot using the premium found in the last market research. Numismatic values stay fixed until you refresh them.
-- **Inventory.** Search by name, year, mint, grade, tag or storage location. Filter by type or metal. Sort by value, gain %, metal ounces, date added or name. The summary shows portfolio value, cost basis, gain, total melt value, and total silver and gold ounces.
-- **Selling.** "Share sell sheet" builds a listing-ready summary with specs, grade, recent comparable sales and current spot. You can export everything to CSV for insurance or tax records. A background job re-researches any values older than 24 hours.
+- **Identify from photos.** Reads year, mint and mint mark, metal, fineness, weight, fine content, diameter, catalogue number, mintage, and grade or slab details. It tells you when a closer photo is needed.
+- **Appraise from real sales.** Researches recent sold listings, auction results and dealer bid/ask prices. You get a fair value, a low–high range, and every comparable sale it used, with links.
+- **Live spot prices.** Silver, gold, platinum and palladium refresh every 30 seconds. Bullion values move with spot, keeping the premium from the last appraisal. Collector coins keep their appraised value until you refresh them.
+- **Organize.** Search by year, mint, grade, tag or storage location. Filter by type and metal, and sort by value, gain, weight, date added or name. See portfolio value, cost basis, gain, melt value, and total silver and gold ounces at a glance.
+- **Sell well.** Each piece has a shareable sell sheet. You can export everything to CSV for insurance or taxes, and refresh stale appraisals in the background.
 
-## Project layout
+## Setup on your Mac (one time, about 15 minutes)
 
-| Path | What it is |
+### 1. Get an Anthropic API key
+1. Sign up at **https://console.anthropic.com**.
+2. Under **Billing**, add credit. $10–20 lasts a long time: an identification costs a few cents, and an appraisal roughly 10–50 cents.
+3. Under **API Keys**, click **Create Key** and copy it. It starts with `sk-ant-`.
+
+### 2. Install Node.js
+Download the **LTS** installer from **https://nodejs.org** and run it with the default options.
+
+### 3. Download Silver Vault
+On **https://github.com/giasone44/silver-vault**, click the green **Code** button, then **Download ZIP**. Move the unzipped folder into **Documents** and rename it `silver-vault`.
+
+### 4. Start it
+Double-click **`Start Silver Vault.command`** in that folder.
+
+- **If macOS says it can't verify the file:** open  → **System Settings** → **Privacy & Security**, scroll down, click **Open Anyway** next to "Start Silver Vault.command", and confirm. You only need to do this once.
+- **On the first run** it asks for your API key, installs what it needs, and builds the app. This takes a few minutes. After that it starts in seconds.
+
+Silver Vault opens in your browser, already connected.
+
+### 5. Connect your iPhone
+The Terminal window shows a **QR code**. With the iPhone on the same Wi-Fi, point the **Camera** app at the code and tap the link. Safari opens Silver Vault already connected. Then tap **Share → Add to Home Screen** so it opens like an app.
+
+## Everyday use
+
+- **Start:** double-click `Start Silver Vault.command`. Keep its Terminal window open while you use the app; your Mac won't go to sleep while it's running.
+- **Stop:** close the Terminal window, or press Control-C in it.
+- **Add a piece:** tap the gold **+**, photograph the front and back, and tap **Identify piece**. Check the details, add what you paid, and save. The appraisal runs automatically and takes about a minute.
+- **Update appraisals:** open a piece and tap **Refresh report**, or use **Settings → Refresh stale reports** to update everything older than 24 hours.
+
+## Your data
+
+Everything is kept in the **`Silver Vault`** folder in your home folder (Finder → Go → Home):
+
+| File | What it is |
 |---|---|
-| `server/` | Node + TypeScript API (Hono, built-in SQLite). Holds your API keys, database and photos. It also serves the desktop web app. |
-| `app/` | Expo / React Native app for iPhone and web. Screens are in `app/src/app/`. |
+| `vault.db` | Your collection, appraisals and price history |
+| `photos/` | Your photographs |
+| `config.env` | Your API key and connection password |
 
-## Setup
+It's separate from the downloaded code, so you can replace the `silver-vault` folder with a newer download at any time without losing anything. Time Machine backs it up automatically. For an extra copy, use **Settings → Export register · CSV**.
 
-### 1. Server
+## Optional extras
 
-```bash
-cd server
-npm install
-cp .env.example .env      # then fill in ANTHROPIC_API_KEY and APP_TOKEN
-npm start                 # http://localhost:8787
-```
-
-Requires Node 22.13 or later (it uses the built-in `node:sqlite`).
-
-- **`ANTHROPIC_API_KEY`** (required). Create one at console.anthropic.com.
-- **`APP_TOKEN`** (required). A long random password you choose. You enter the same value in the app.
-- **Spot prices.** Works with no key by default (gold-api.com). To use metals.dev or goldapi.io instead, set `SPOT_PROVIDER` and `SPOT_API_KEY`.
-- **eBay** (optional). Add `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` from developer.eBay.com to feed current eBay listings into each valuation. Actual *sold* data from eBay's API (Marketplace Insights) requires eBay to approve your app. Once approved, set `EBAY_MARKETPLACE_INSIGHTS=true`. Until then, sold prices come from Claude's web research.
-
-### 2. Desktop
-
-```bash
-cd app && npm install && npm run build:web
-```
-
-Then open the server's URL (e.g. http://localhost:8787) in any browser, go to Settings, and enter your `APP_TOKEN`.
-
-### 3. iPhone
-
-**To try it today:** install **Expo Go** from the App Store, then:
-
-```bash
-cd app && npx expo start
-```
-
-Scan the QR code with the iPhone camera. In the app's Settings, set the server URL to your computer's LAN address (for example `http://192.168.1.20:8787`) and enter your token. The phone has to be on the same Wi-Fi.
-
-**To use it anywhere:** deploy the server somewhere reachable. Any host with a persistent disk works (Railway, Render, Fly.io, a VPS, or a home machine with Tailscale). Point the app at that URL.
-
-**To install it as a real app, or publish it:** use EAS Build. You don't need a Mac.
-
-```bash
-cd app
-npx eas-cli@latest build -p ios --profile preview   # installable build for your own phone
-npx eas-cli@latest submit -p ios                    # App Store / TestFlight
-```
-
-This requires an Apple Developer account ($99/year). Change `ios.bundleIdentifier` in `app/app.json` to your own identifier first.
+- **Use it away from home.** Install **Tailscale** (free for personal use, https://tailscale.com) on both the Mac and the iPhone, and sign in to the same account on each. The Terminal window then also shows an "Away from home" link that works anywhere, privately. Your Mac still needs to be on.
+- **Richer eBay data.** Create a free developer account at https://developer.ebay.com and add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` to `config.env`. Current eBay listings then feed into each appraisal. To open the file, run `open -e ~/"Silver Vault/config.env"` in Terminal. Actual *sold* data from eBay's API requires eBay's approval (Marketplace Insights). Until then, sold prices come from web research.
+- **A cheaper AI model.** Add `CLAUDE_MODEL=claude-sonnet-5-5` to `config.env`.
 
 ## How values are calculated
 
-- **Melt** = fine troy oz × live spot.
-- **Market value** comes from the most recent research. For items classed as bullion, the value is `researched value + (spot now − spot at research) × fine oz`, so it tracks the market between refreshes. Numismatic items hold their researched value.
-- Items that have never been researched show melt value and are marked "not valued".
-- Every research run is saved, so each item keeps a value history.
+- **Melt** = fine troy ounces × live spot.
+- **Bullion pieces:** the appraised value is adjusted live by the change in spot since the appraisal, times the fine ounces.
+- **Numismatic pieces:** the appraised value holds until the next refresh.
+- **Pieces not yet appraised** show melt value and are marked *Unvalued*.
+- Every appraisal is kept, so each piece has a value history.
 
-## Running costs (rough)
+## For developers
 
-Each identification is one Claude vision call, typically a few cents. Each market research runs several web searches plus page reads, so expect on the order of tens of cents per item. Refreshing a large inventory daily adds up, which is why the background refresh only re-researches values older than 24 hours. You can switch `CLAUDE_MODEL` to `claude-sonnet-5-5` in `.env` for a cheaper model.
-
-## Before selling this commercially
-
-The current build is designed for one owner: one server, one shared token. Commercial use needs:
-
-1. **User accounts.** Sign in with Apple is required on iOS if you offer any other social login. Each user's items need to be kept separate. Add a `user_id` to items and replace `APP_TOKEN` with per-user sessions.
-2. **Hosted database and photo storage.** Postgres plus S3 or R2, instead of SQLite and local disk.
-3. **Billing.** Apple requires in-app purchase for digital subscriptions sold in the app. Rate-limit the AI endpoints per user so costs can't run away.
-4. **Data licensing.** Check the terms of whichever spot provider you use for commercial redistribution. eBay's API license also governs how its data can be displayed.
-5. **Disclaimers.** Present values as estimates, not appraisals.
+| Path | What it is |
+|---|---|
+| `server/` | Node + TypeScript API (Hono, built-in SQLite). Holds the key and the data, and serves the web app. `npm start` reads `server/.env`; see `server/.env.example`. |
+| `app/` | Expo / React Native app for iPhone and web. Screens are in `app/src/app/`. `npm run build:web` builds the web version; `npx expo start` runs it in Expo Go. |

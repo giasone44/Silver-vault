@@ -28,7 +28,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
-      .then((raw) => raw && setSettings({ ...DEFAULTS, ...JSON.parse(raw) }))
+      .then(async (raw) => {
+        let s: Settings = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS;
+        // The server prints a QR link with ?t=<token>; opening it connects this device.
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          const t = url.searchParams.get("t");
+          if (t) {
+            s = { ...s, serverUrl: window.location.origin, token: t };
+            await AsyncStorage.setItem(KEY, JSON.stringify(s));
+            url.searchParams.delete("t");
+            window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+          }
+        }
+        setSettings(s);
+      })
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);

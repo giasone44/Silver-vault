@@ -12,11 +12,13 @@
     "@anthropic-ai/sdk": "^0.129.0",
     "@hono/node-server": "^2.1.1",
     "hono": "^4.13.10",
+    "qrcode-terminal": "^0.12.0",
     "tsx": "^4.23.15",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
+    "@types/qrcode-terminal": "^0.12.2",
     "typescript": "^7.0.2"
   }
 }
