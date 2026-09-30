@@ -24,9 +24,9 @@ export type LiveValue = {
 };
 
 /**
- * Bullion valuations float with spot: the premium found at research time is
- * kept and melt is re-priced live. Numismatic valuations are held fixed until
- * the next market refresh.
+ * Every valuation floats with spot: the market premium found from sold prices
+ * is kept and the metal underneath is re-priced live. Reports are re-researched
+ * weekly, so the premium itself follows the market too.
  */
 export function liveValue(item: Item, quote: SpotQuote | null): LiveValue {
   const spot = spotFor(quote, item.metal);
@@ -38,7 +38,7 @@ export function liveValue(item: Item, quote: SpotQuote | null): LiveValue {
   if (v) {
     source = "market";
     unit =
-      v.pricing_model === "bullion" && spot != null && v.spot_at_valuation != null && ozs != null
+      spot != null && v.spot_at_valuation != null && ozs != null
         ? v.estimated_value_usd + (spot - v.spot_at_valuation) * ozs
         : v.estimated_value_usd;
   }

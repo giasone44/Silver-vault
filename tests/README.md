@@ -10,5 +10,6 @@ APP_TOKEN=t ANTHROPIC_API_KEY=sk-ant-GOOD-0000000000000000000000 NUMISTA_API_KEY
   DATA_DIR=/tmp/sv-test PORT=8788 WEB_DIST_DIR=../app/dist \
   node --no-warnings --import tsx --import ../tests/mock-services.mjs src/index.ts &
 cd ../tests && node e2e.mjs            # add OPUS_FAIL=1 to the server to test the backup model
+cd ../server && node --import tsx ../tests/sales-check.ts   # valuation must follow sold prices
 ```
 Requires Playwright (`npm i playwright`).

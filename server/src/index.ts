@@ -20,7 +20,7 @@ import { catalogIssues, catalogSpecs, numistaEnabled, searchCatalog } from "./nu
 import { LocalAiError, ollamaIdentify, ollamaStatus, warmUp } from "./ollama.js";
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
-import { fineOz, queueRevalue, revalueStatus, valuateItem } from "./valuate.js";
+import { fineOz, queueRevalue, recheckMeltValuations, revalueStatus, scheduleMarketRefresh, valuateItem } from "./valuate.js";
 import { queueResearch, reidentify, resumeResearch } from "./research.js";
 import { autoUpdates, currentVersion, latestVersion, scheduleUpdates, startUpdate } from "./updater.js";
 
@@ -57,14 +57,17 @@ function tokenOk(given: string | undefined | null): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Current value of one unit: bullion valuations float with spot, numismatic ones stay fixed. */
+/**
+ * Current value of one unit. Every valuation floats with spot: the market premium
+ * found from sold prices is kept, and the metal underneath is re-priced live.
+ */
 function liveUnitValue(item: Item, quote: SpotQuote | null): { melt: number | null; unit: number | null } {
   const spot = quote ? spotFor(quote, item.metal) : null;
   const oz = fineOz(item);
   const melt = spot != null && oz != null ? spot * oz : null;
   const v = item.valuation;
   if (!v) return { melt, unit: melt };
-  if (v.pricing_model === "bullion" && spot != null && v.spot_at_valuation != null && oz != null) {
+  if (spot != null && v.spot_at_valuation != null && oz != null) {
     return { melt, unit: v.estimated_value_usd + (spot - v.spot_at_valuation) * oz };
   }
   return { melt, unit: v.estimated_value_usd };
@@ -352,6 +355,9 @@ function reachableAddresses() {
 serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
   if (config.aiProvider === "ollama") void warmUp();
   resumeResearch();
+  const rechecked = recheckMeltValuations();
+  if (rechecked) console.log(`Re-researching ${rechecked} piece(s) valued before the sold-price check.`);
+  scheduleMarketRefresh();
   scheduleUpdates();
   const { lan, tailscale } = reachableAddresses();
   const link = (host: string) => `http://${host}:${info.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;

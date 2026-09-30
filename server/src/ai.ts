@@ -139,14 +139,16 @@ export async function identify(obverse: Photo, reverse: Photo | null): Promise<I
   }
 }
 
-const VALUE_SYSTEM = `You are a precious-metals and coin market analyst. Your job is to determine what an item is actually worth today based on what buyers have ACTUALLY PAID recently - not asking prices.
+const VALUE_SYSTEM = `You are a precious-metals and coin market analyst. Your job is to determine what an item is actually worth today based on what buyers have ACTUALLY PAID recently - not asking prices, and never simply melt.
 
 Research method:
-1. Search for recent completed/sold sales of this exact item: eBay sold listings, Heritage / GreatCollections / Stack's Bowers auction archives, and dealer buy/sell prices (APMEX, JM Bullion, SD Bullion, etc.). For graded coins also check PCGS/NGC price guides and population context.
-2. Match year, mint mark, grade, and certification as closely as possible. Discard lots, damaged items, and mismatched grades, or adjust for them.
-3. Weight recent actual sales most heavily. Treat asking prices only as an upper bound.
-4. Compare against melt value at the current spot price. Bullion items should land at a sensible premium over melt; if a price seems to be below melt, re-check.
-5. Record every sale you relied on in comps, with its URL.
+1. Search for recent completed/sold sales of this exact item. Start with the sold-listing pages given in the request (eBay sold results, 130point.com, which shows eBay sold prices including accepted best offers), then auction archives (Heritage, GreatCollections, Stack's Bowers), WorthPoint results, collector forums, and dealer buy/sell prices (APMEX, JM Bullion, SD Bullion, and dealers in vintage silver).
+2. Search by the exact name AND by the design, maker and nicknames collectors use (for example "Swiss of America", "SOA", "rolo", "Golden West", "Teton", "vintage silver round"). Try several phrasings until you find real sales.
+3. Match year, mint mark, design, grade, and certification as closely as possible. Discard lots, damaged items, and mismatched pieces, or adjust for them.
+4. Weight recent actual sales most heavily. Treat asking prices only as an upper bound.
+5. Many private rounds and bars carry a collector premium well above melt: vintage 1970s-1980s rounds and bars, defunct refiners and mints (Engelhard, Johnson Matthey, Swiss of America, Golden State Mint vintage, Mother Lode, Hoover & Strong, Handy & Harman and others), low-mintage designs, rolos, and so on. For these use pricing_model "numismatic" and value from their sold prices. Use "bullion" only for pieces that genuinely trade at a spot-based premium (modern generic rounds, current government bullion coins).
+6. Never report melt value as the answer unless actual sales show the piece trades at melt. If you cannot find sales of this exact piece, use the closest comparable pieces, say so in the summary, and lower confidence.
+7. Record every sale you relied on in comps, with its URL and date.
 
 Be concise in your prose. When finished, output ONLY a single JSON object (no markdown fences) with exactly these keys:
 pricing_model ("bullion"|"numismatic"), estimated_value_usd, low_usd, high_usd, dealer_buy_usd (number|null), dealer_sell_usd (number|null), confidence ("low"|"medium"|"high"), comps (array of {title, price_usd, date, source, url, kind: "sold"|"auction"|"dealer_sell"|"dealer_buy"|"price_guide"|"asking"}), summary, selling_tips.
@@ -205,6 +207,11 @@ export async function researchMarket(
     : `Spot price is unavailable right now.\n`;
   prompt += `Today's date: ${new Date().toISOString().slice(0, 10)}.\n`;
   if (item.specs?.mintage) prompt += `Recorded mintage for this issue: ${item.specs.mintage}.\n`;
+  if (item.specs?.obverse_description) prompt += `Obverse as photographed: ${item.specs.obverse_description}\n`;
+  if (item.specs?.reverse_description) prompt += `Reverse as photographed: ${item.specs.reverse_description}\n`;
+  if (item.dossier?.summary) prompt += `\nWhat research found about this piece: ${item.dossier.summary}\n`;
+  const q = encodeURIComponent(item.search_query ?? item.specs?.search_query ?? item.name);
+  prompt += `\nSold-listing pages to check first:\n- https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1\n- https://130point.com/sales/?q=${q}\n`;
   if (ctx.maker) prompt += `\nMaker background (${ctx.maker.name}): ${ctx.maker.about} ${ctx.maker.collecting}\n`;
   if (ctx.guide) {
     prompt += `\nNumista catalogue price guide for this year/mint (USD, by grade - a reference, not actual sales): ${ctx.guide.comps
@@ -215,7 +222,7 @@ export async function researchMarket(
     prompt += `\nData pulled from the eBay API (verify relevance before using):\n${JSON.stringify(ctx.ebay.slice(0, 40))}\n`;
   }
 
-  return webResearch(VALUE_SYSTEM, prompt, MarketResearch, "market research", { searches: 10, fetches: 6 });
+  return webResearch(VALUE_SYSTEM, prompt, MarketResearch, "market research", { searches: 15, fetches: 10 });
 }
 
 /**

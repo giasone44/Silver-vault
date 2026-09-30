@@ -178,7 +178,7 @@ export default function ItemScreen() {
         <AnimatedNumber value={lv.total} format={(n) => money(n)} style={[type.figureLarge, { fontSize: 46, marginTop: 6 }]} />
         <Text style={type.italic}>
           {money(lv.unit)} each ·{" "}
-          {lv.source === "market" ? (v?.pricing_model === "bullion" ? "market premium, tracking spot" : "collector market value") : "melt only — awaiting research"}
+          {lv.source === "market" ? (v?.pricing_model === "bullion" ? "from recent sales · moves with spot" : "collector value from recent sales · moves with spot") : "melt only — awaiting research"}
         </Text>
       </Reveal>
 

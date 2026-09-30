@@ -182,9 +182,9 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={[type.italic, { marginTop: 30, fontSize: 14, lineHeight: 20 }]}>
-        Spot prices are refreshed automatically. Bullion values move with spot, keeping the premium found in the most
-        recent market report; numismatic values hold until the report is refreshed. Photographs and records are kept on
-        your server.
+        Spot prices refresh every 30 seconds, and every value moves with them, keeping the premium buyers actually paid.
+        Each piece's sold prices are re-researched every week, so premiums follow the market too. Photographs and
+        records are kept on your Mac.
       </Text>
     </ScrollView>
   );

@@ -5,7 +5,7 @@ import { matchMaker } from "./makers.js";
 import { numistaEnabled, priceGuide } from "./numista.js";
 import { getItem, listItems, setValuation } from "./db.js";
 import { ebayComps } from "./ebay.js";
-import type { Item, Valuation } from "./schemas.js";
+import type { Item, MarketResearch, Valuation } from "./schemas.js";
 import { getSpot, spotFor } from "./spot.js";
 
 export function fineOz(item: Pick<Item, "fine_weight_troy_oz" | "gross_weight_troy_oz" | "purity">): number | null {
@@ -37,14 +37,38 @@ export async function valuateItem(id: string): Promise<Item> {
         })
       : await freeAppraisal(item, { spot, melt, ebay });
   const valuation: Valuation = {
-    ...research,
+    ...checkAgainstSales(research, melt),
     valued_at: new Date().toISOString(),
     spot_at_valuation: spot,
     melt_at_valuation: melt,
-    model: config.aiProvider === "claude" ? config.claudeModel : "free: melt + catalogue + marketplace",
+    model: config.aiProvider === "claude" ? `${config.claudeModel} · ${SALES_CHECKED}` : "free: melt + catalogue + marketplace",
   };
   setValuation(id, valuation);
   return getItem(id)!;
+}
+
+/**
+ * Safety net: the value must agree with the actual sales found. If it sits well
+ * below the median sold price (typically melt, for a collectible round or bar),
+ * the sold prices win.
+ */
+export function checkAgainstSales(r: MarketResearch, melt: number | null): MarketResearch {
+  const sold = r.comps
+    .filter((c) => (c.kind === "sold" || c.kind === "auction") && c.price_usd > 0)
+    .map((c) => c.price_usd)
+    .sort((a, b) => a - b);
+  if (sold.length < 2) return r;
+  const median = sold.length % 2 ? sold[(sold.length - 1) / 2] : (sold[sold.length / 2 - 1] + sold[sold.length / 2]) / 2;
+  if (r.estimated_value_usd >= median * 0.85) return r;
+  const premium = melt != null && median > melt * 1.1;
+  return {
+    ...r,
+    pricing_model: premium ? "numismatic" : r.pricing_model,
+    estimated_value_usd: Math.round(median * 100) / 100,
+    low_usd: Math.min(r.low_usd, sold[0]),
+    high_usd: Math.max(r.high_usd, sold[sold.length - 1]),
+    summary: `${r.summary} Value set to the median of ${sold.length} recent sales ($${median.toFixed(2)}).`,
+  };
 }
 
 // --- Background bulk revaluation -------------------------------------------
@@ -84,4 +108,31 @@ export function queueRevalue(opts: { ids?: string[]; staleHours?: number }): num
   revalueStatus.queued = queue.length;
   void drain();
   return ids.length;
+}
+
+/** Marks valuations made with the sold-price rules and safety check. */
+const SALES_CHECKED = "sold-price check";
+
+/**
+ * Valuations made before the sold-price rules may have settled on melt for
+ * collectible pieces. Research those again, once.
+ */
+export function recheckMeltValuations(): number {
+  if (config.aiProvider !== "claude") return 0;
+  const ids = listItems()
+    .filter((i) => i.valuation && !i.valuation.model.includes(SALES_CHECKED))
+    .map((i) => i.id);
+  return ids.length ? queueRevalue({ ids }) : 0;
+}
+
+/** Re-research every piece's sold prices once a week, so values follow the market. */
+const REFRESH_DAYS = 7;
+export function scheduleMarketRefresh() {
+  if (config.aiProvider !== "claude") return;
+  const run = () => {
+    const n = queueRevalue({ staleHours: REFRESH_DAYS * 24 });
+    if (n) console.log(`Weekly market refresh: re-researching ${n} piece(s).`);
+  };
+  setTimeout(run, 10 * 60_000).unref();
+  setInterval(run, 6 * 3600_000).unref();
 }
