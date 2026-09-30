@@ -301,6 +301,27 @@ app.get("/api/export.csv", async (c) => {
   return c.body(lines.join("\n"));
 });
 
+// Home-screen app manifest. An iPhone home-screen app has its own storage, separate
+// from Safari, so a device that already holds the token gets a start address that
+// carries it; the icon then opens already connected.
+app.get("/manifest.json", (c) => {
+  const t = c.req.query("t");
+  c.header("Cache-Control", "no-cache");
+  return c.json({
+    name: "Silver Vault",
+    short_name: "Silver Vault",
+    start_url: t && tokenOk(t) ? `/?t=${encodeURIComponent(t)}` : "/",
+    scope: "/",
+    display: "standalone",
+    background_color: "#09090B",
+    theme_color: "#09090B",
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    ],
+  }, 200, { "Content-Type": "application/manifest+json" });
+});
+
 // Serve the desktop web build of the app (npm run build:web in /app) if present.
 if (fs.existsSync(config.webDistDir)) {
   const root = path.relative(process.cwd(), config.webDistDir);

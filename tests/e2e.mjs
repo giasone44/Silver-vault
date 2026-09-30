@@ -11,6 +11,14 @@ const step = async (name, fn) => { try { await fn(); console.log("PASS", name); 
 const see = (t, timeout = 15000) => p.getByText(t, { exact: false }).first().waitFor({ timeout });
 
 await step("open app with pairing link", async () => { await p.goto(BASE + "/?t=t"); await see("The vault awaits"); });
+await step("home-screen icon opens the app already connected", async () => {
+  const href = await p.locator('link[rel="manifest"]').getAttribute("href");
+  const m = await (await fetch(new URL(href, BASE))).json();
+  if (m.display !== "standalone" || m.start_url !== "/?t=t") throw new Error(`manifest ${JSON.stringify(m)}`);
+  const icon = await p.locator('link[rel="apple-touch-icon"]').getAttribute("href");
+  const r = await fetch(new URL(icon, BASE));
+  if (!r.ok || r.headers.get("content-type") !== "image/png") throw new Error(`icon ${r.status}`);
+});
 await step("add: identify from photos", async () => {
   await p.getByText("＋", { exact: false }).first().click().catch(() => p.goto(BASE + "/add"));
   await p.goto(BASE + "/add"); await see("Photograph both faces");

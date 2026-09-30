@@ -37,9 +37,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           if (t) {
             s = { ...s, serverUrl: window.location.origin, token: t };
             await AsyncStorage.setItem(KEY, JSON.stringify(s));
-            url.searchParams.delete("t");
-            window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+            // The link stays in the address bar on purpose: Share → Add to Home Screen
+            // saves this address, and the home-screen app can't see Safari's storage.
           }
+          linkHomeScreenApp(s);
         }
         setSettings(s);
       })
@@ -49,6 +50,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const save = async (s: Settings) => {
     const clean = { ...s, serverUrl: s.serverUrl.trim().replace(/\/+$/, ""), token: s.token.trim() };
+    if (Platform.OS === "web") linkHomeScreenApp(clean);
     setSettings(clean);
     await AsyncStorage.setItem(KEY, JSON.stringify(clean));
   };
@@ -56,6 +58,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Hold rendering until stored settings are read so no screen starts with defaults.
   if (!loaded) return null;
   return <SettingsContext.Provider value={{ settings, loaded, save }}>{children}</SettingsContext.Provider>;
+}
+
+/** Points the home-screen manifest at one that opens the app already connected. */
+function linkHomeScreenApp(s: Settings) {
+  if (typeof document === "undefined" || !s.token || s.serverUrl !== window.location.origin) return;
+  const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (link) link.href = `/manifest.json?t=${encodeURIComponent(s.token)}`;
 }
 
 export function useSettings() {
