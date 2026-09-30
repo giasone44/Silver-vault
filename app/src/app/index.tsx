@@ -6,6 +6,7 @@ import { SpotComplications } from "../components/Complications";
 import { ItemCard } from "../components/ItemCard";
 import { Reveal } from "../components/motion";
 import { Button, Icon, Pusher, Register, RegisterRow, SectionTitle, Segmented } from "../components/ui";
+import { VaultRing } from "../components/vault";
 import { BalanceWheel, MainDial } from "../components/watch";
 import { useApi } from "../lib/api";
 import { money } from "../lib/format";
@@ -93,7 +94,9 @@ export default function Inventory() {
   const totals = portfolioTotals(visible, quote);
   const filtered = visible.length !== (items?.length ?? 0);
   const unvalued = visible.filter((i) => !i.valuation).length;
-  const dialSize = Math.min(width, 360);
+  const vaultSize = Math.min(width, 400);
+  const band = Math.round(vaultSize * 0.075);
+  const dialSize = vaultSize - band * 2;
 
   const header = (
     <View style={{ width, alignSelf: "center" }}>
@@ -109,6 +112,7 @@ export default function Inventory() {
       </View>
 
       <Reveal style={{ alignItems: "center", marginTop: 18 }}>
+        <VaultRing size={vaultSize} band={band}>
         <MainDial
           size={dialSize}
           label={filtered ? "Selection" : "Portfolio"}
@@ -118,6 +122,7 @@ export default function Inventory() {
           silverOz={totals.silverOz}
           goldOz={totals.goldOz}
         />
+        </VaultRing>
       </Reveal>
 
       <Reveal delay={120} style={{ marginTop: 22 }}>

@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { Platform, Pressable, Text, View } from "react-native";
 import { SettingsProvider } from "../lib/settings";
 import { SpotProvider } from "../lib/spot";
+import { VaultEntrance } from "../components/vault";
 import { colors, fonts } from "../lib/theme";
 
 // iOS dismisses modals with a swipe; the web build needs an explicit button.
@@ -50,6 +51,7 @@ export default function RootLayout() {
           <Stack.Screen name="edit/[id]" options={{ title: "AMEND RECORD", presentation: "modal", headerLeft: modalCancel }} />
           <Stack.Screen name="settings" options={{ title: "SETTINGS" }} />
         </Stack>
+        <VaultEntrance />
       </SpotProvider>
     </SettingsProvider>
   );

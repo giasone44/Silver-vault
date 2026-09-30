@@ -11,6 +11,7 @@ const step = async (name, fn) => { try { await fn(); console.log("PASS", name); 
 const see = (t, timeout = 15000) => p.getByText(t, { exact: false }).first().waitFor({ timeout });
 
 await step("open app with pairing link", async () => { await p.goto(BASE + "/?t=t"); await see("The vault awaits"); });
+await step("vault door opens by itself", async () => { await p.getByLabel("Open the vault").waitFor({ state: "detached", timeout: 6000 }); });
 await step("home-screen icon opens the app already connected", async () => {
   const href = await p.locator('link[rel="manifest"]').getAttribute("href");
   const m = await (await fetch(new URL(href, BASE))).json();
