@@ -24,11 +24,13 @@ export default function SettingsScreen() {
 
   const [pairing, setPairing] = useState<{ url: string; svg: string } | null>(null);
   const [version, setVersion] = useState<Awaited<ReturnType<ReturnType<typeof createApi>["version"]>> | null>(null);
+  const [diag, setDiag] = useState<Awaited<ReturnType<ReturnType<typeof createApi>["diagnostics"]>> | null>(null);
 
   useEffect(() => {
     createApi(settings).health().then(setHealth).catch(() => {});
     createApi(settings).pairing().then(setPairing).catch(() => {});
     createApi(settings).version().then(setVersion).catch(() => {});
+    createApi(settings).diagnostics().then(setDiag).catch(() => {});
   }, [settings]);
 
   const updateNow = async () => {
@@ -146,6 +148,29 @@ export default function SettingsScreen() {
           </Text>
           {version.auto_updates && !version.repo_private && (
             <Button title="Update now" kind="secondary" onPress={updateNow} busy={busy === "update"} style={{ marginTop: 12 }} />
+          )}
+        </>
+      )}
+
+      {diag && (
+        <>
+          <SectionTitle>Recent problems</SectionTitle>
+          <Text style={type.bodyMuted}>
+            Version {diag.version?.slice(0, 7) ?? "unknown"} · {diag.ai_provider === "claude" ? diag.ai_model : "free on-Mac AI"}
+          </Text>
+          {diag.problems.length === 0 ? (
+            <Text style={[type.body, { color: colors.up, marginTop: 8 }]}>None. Everything is working.</Text>
+          ) : (
+            <View style={{ gap: 14, marginTop: 12 }}>
+              {diag.problems.slice(0, 6).map((p) => (
+                <View key={p.at + p.where} style={{ gap: 2 }}>
+                  <Text style={type.labelGold}>{p.where} · {new Date(p.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</Text>
+                  <Text style={type.body}>{p.message}</Text>
+                  {p.detail && <Text style={[type.bodyMuted, { fontSize: 13 }]}>{p.detail}</Text>}
+                </View>
+              ))}
+              <Text style={[type.italic, { fontSize: 13 }]}>A screenshot of this section explains the problem exactly.</Text>
+            </View>
           )}
         </>
       )}

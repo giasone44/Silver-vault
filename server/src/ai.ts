@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { BetaMessage, BetaMessageParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { config } from "./config.js";
+import { recordProblem } from "./diagnostics.js";
 import { MAKERS, type Maker } from "./makers.js";
 import { Dossier, Identification, MarketResearch, type Comp, type Item } from "./schemas.js";
 import type * as z from "zod/v4";
@@ -141,6 +142,7 @@ export async function identify(obverse: Photo, reverse: Photo | null, extras: Ph
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) throw err;
     console.error("identify with web search failed or ran out of time, reading photos only:", err);
+    recordProblem("Identify · web check", "The web check didn't finish, so the photos were read on their own.", err);
     return readPhotos(content);
   }
 }

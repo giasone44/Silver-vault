@@ -44,7 +44,7 @@ export default function AddItem() {
       haptic.success();
     } catch (e) {
       haptic.error();
-      setError(`Couldn't identify this piece. ${e instanceof Error ? e.message : String(e)}`);
+      setError(`Couldn't identify this piece. ${e instanceof Error ? e.message : String(e)}\n\nFor the exact reason: tap the gear, then scroll to Recent problems.`);
     } finally {
       setBusy(null);
     }

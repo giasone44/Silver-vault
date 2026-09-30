@@ -21,6 +21,7 @@ import { LocalAiError, ollamaIdentify, ollamaStatus, warmUp } from "./ollama.js"
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, recheckMeltValuations, revalueStatus, scheduleMarketRefresh, valuateItem } from "./valuate.js";
+import { recentProblems, recordProblem } from "./diagnostics.js";
 import { getJob, startJob } from "./jobs.js";
 import { queueResearch, reidentify, resumeResearch } from "./research.js";
 import { autoUpdates, currentVersion, latestVersion, scheduleUpdates, startUpdate } from "./updater.js";
@@ -96,6 +97,7 @@ function describeError(err: unknown): { error: string; status: number; details?:
 app.onError((err, c) => {
   console.error(err);
   const { error, status, details } = describeError(err);
+  if (status >= 500 || status === 422) recordProblem(`${c.req.method} ${c.req.path}`, error, err);
   return c.json({ error, details }, status as 400);
 });
 
@@ -142,7 +144,7 @@ app.get("/api/spot/history", (c) => {
 app.post("/api/identify", async (c) => {
   const body = z.object({ obverse: Photo, reverse: Photo.nullish(), extras: Photo.array().max(4).nullish() }).parse(await c.req.json());
   const reverse = body.reverse ?? null;
-  const job = startJob(async () => {
+  const job = startJob("Identify", async () => {
     const ident =
       config.aiProvider === "claude" ? await identify(body.obverse, reverse, body.extras ?? []) : await ollamaIdentify(body.obverse, reverse);
     // Put the maker under its standard name ("Englehard" -> "Engelhard").
@@ -152,6 +154,10 @@ app.post("/api/identify", async (c) => {
   }, (err) => describeError(err).error);
   return c.json({ job }, 202);
 });
+
+app.get("/api/diagnostics", (c) =>
+  c.json({ version: currentVersion(), ai_provider: config.aiProvider, ai_model: config.claudeModel, problems: recentProblems() }),
+);
 
 app.get("/api/jobs/:id", (c) => {
   const job = getJob(c.req.param("id"));
@@ -268,7 +274,7 @@ app.post("/api/items/:id/research", (c) => {
 app.post("/api/items/:id/reidentify", (c) => {
   const id = c.req.param("id");
   if (!db.getItem(id)) return c.json({ error: "Not found" }, 404);
-  return c.json({ job: startJob(() => reidentify(id), (err) => describeError(err).error) }, 202);
+  return c.json({ job: startJob("Re-identify", () => reidentify(id), (err) => describeError(err).error) }, 202);
 });
 
 app.get("/api/version", async (c) => {

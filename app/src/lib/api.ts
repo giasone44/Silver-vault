@@ -108,6 +108,10 @@ export function createApi(s: Settings) {
       call<{ current: string | null; latest: string | null; update_available: boolean; auto_updates: boolean; repo_private: boolean }>(
         "/api/version",
       ),
+    diagnostics: () =>
+      call<{ version: string | null; ai_provider: string; ai_model: string; problems: { at: string; where: string; message: string; detail: string | null }[] }>(
+        "/api/diagnostics",
+      ),
     updateApp: () => call<{ started: boolean }>("/api/update", { method: "POST" }),
     saveAiKey: (key: string) =>
       call<{ ok: true; ai_provider: string; ai_model: string }>("/api/settings/ai-key", { method: "POST", body: JSON.stringify({ key }) }),

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recordProblem } from "./diagnostics.js";
 
 /**
  * Long AI tasks (identifying with web search can take a couple of minutes) run
@@ -8,15 +9,17 @@ import { randomUUID } from "node:crypto";
 type Job = { status: "running" | "done" | "failed"; result?: unknown; error?: string; started: number };
 const jobs = new Map<string, Job>();
 
-export function startJob(task: () => Promise<unknown>, describe: (err: unknown) => string): string {
+export function startJob(where: string, task: () => Promise<unknown>, describe: (err: unknown) => string): string {
   const id = randomUUID();
   const job: Job = { status: "running", started: Date.now() };
   jobs.set(id, job);
   task().then(
     (result) => Object.assign(job, { status: "done", result }),
     (err) => {
-      console.error("job failed:", err);
-      Object.assign(job, { status: "failed", error: describe(err) });
+      console.error(`${where} failed:`, err);
+      const error = describe(err);
+      recordProblem(where, error, err);
+      Object.assign(job, { status: "failed", error });
     },
   );
   // Forget finished jobs after an hour.

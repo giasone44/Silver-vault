@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { recordProblem } from "./diagnostics.js";
 import { researchMarket } from "./ai.js";
 import { freeAppraisal } from "./appraise.js";
 import { matchMaker } from "./makers.js";
@@ -90,6 +91,7 @@ async function drain() {
     } catch (err) {
       revalueStatus.failed++;
       console.error(`revalue ${id} failed:`, err);
+      recordProblem("Market refresh", `Market refresh for ${getItem(id)?.name ?? "a piece"} didn't finish.`, err);
     }
   }
   revalueStatus.current = null;

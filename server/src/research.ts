@@ -9,6 +9,7 @@ import { catalogSpecs, numistaEnabled, searchCatalog, type CatalogSpecs } from "
 import { ollamaIdentify } from "./ollama.js";
 import type { Dossier, Identification, Item, ItemInput } from "./schemas.js";
 import { valuateItem } from "./valuate.js";
+import { recordProblem } from "./diagnostics.js";
 
 // Background research: after a piece is saved (or re-identified) the server
 // builds its reference file and market valuation without the phone waiting.
@@ -41,6 +42,7 @@ async function drain() {
       db.setResearchStatus(id, "done");
     } catch (err) {
       console.error(`research ${id} failed:`, err);
+      recordProblem("Research", `Research for ${db.getItem(id)?.name ?? "a piece"} didn't finish.`, err);
       const busy = err instanceof Anthropic.APIError && (err.status ?? 0) >= 500;
       const message = busy
         ? "Claude was busy (Anthropic's servers). Tap Try again in a minute."
