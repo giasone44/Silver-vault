@@ -40,6 +40,29 @@ export function createApi(s: Settings) {
     return body as T;
   }
 
+  /**
+   * Starts a long task on the Mac (identifying with web research can take a
+   * couple of minutes), then checks back every few seconds until it finishes.
+   * A dropped check, e.g. while the phone's screen was off, is simply retried.
+   */
+  async function runJob<T>(path: string, init: RequestInit, maxMs = 8 * 60_000): Promise<T> {
+    const { job } = await call<{ job: string }>(path, init, 60_000);
+    const until = Date.now() + maxMs;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 2500));
+      let state: { status: "running" | "done" | "failed"; result: T; error: string | null };
+      try {
+        state = await call(`/api/jobs/${job}`, {}, 15_000);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 0) continue; // network blip: check again
+        throw e;
+      }
+      if (state.status === "done") return state.result;
+      if (state.status === "failed") throw new ApiError(state.error ?? "Something went wrong.", 500);
+    }
+    throw new ApiError("This is taking unusually long. Please try again.", 0);
+  }
+
   return {
     health: () => call<Health>("/api/health"),
     catalogSearch: (q: string, type?: string) =>
@@ -55,11 +78,10 @@ export function createApi(s: Settings) {
     identify: (obverse: Photo, reverse: Photo | null, small = false, extras: Photo[] = []) => {
       const pick = (p: Photo | null) =>
         p ? { base64: small && p.aiBase64 ? p.aiBase64 : p.base64, mediaType: p.mediaType } : null;
-      return call<Identification>(
-        "/api/identify",
-        { method: "POST", body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse), extras: extras.map(upload) }) },
-        200_000,
-      );
+      return runJob<Identification>("/api/identify", {
+        method: "POST",
+        body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse), extras: extras.map(upload) }),
+      });
     },
     warmup: () => call<{ ok: true }>("/api/warmup", { method: "POST" }),
     items: () => call<Item[]>("/api/items"),
@@ -80,7 +102,7 @@ export function createApi(s: Settings) {
     /** Queues the full background research (reference file + market value). */
     research: (id: string) => call<Item>(`/api/items/${id}/research`, { method: "POST" }),
     /** Reads the saved photos again from scratch, then re-researches. */
-    reidentify: (id: string) => call<Item>(`/api/items/${id}/reidentify`, { method: "POST" }, 200_000),
+    reidentify: (id: string) => runJob<Item>(`/api/items/${id}/reidentify`, { method: "POST" }),
     pairing: () => call<{ url: string; svg: string }>("/api/pairing"),
     version: () =>
       call<{ current: string | null; latest: string | null; update_available: boolean; auto_updates: boolean; repo_private: boolean }>(

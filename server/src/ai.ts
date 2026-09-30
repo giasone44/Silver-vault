@@ -58,7 +58,7 @@ async function resilient<T>(run: (a: Attempt) => Promise<T>): Promise<T> {
       return await run(attempt);
     } catch (err) {
       last = err;
-      if (!(err instanceof Anthropic.APIError)) throw err;
+      if (!(err instanceof Anthropic.APIError) || err instanceof Anthropic.APIUserAbortError) throw err;
       const status = err.status ?? 0; // 0 = connection problem
       const optionRejected = status === 400 && /fallback|beta/i.test(err.message);
       if (!(status === 0 || status === 429 || status >= 500 || optionRejected)) throw err;
@@ -136,14 +136,17 @@ export async function identify(obverse: Photo, reverse: Photo | null, extras: Ph
   });
   try {
     // Photos plus web search: read the piece, then confirm it against the maker and dealers.
-    const found = await webResearch(IDENTIFY_SYSTEM, content, Identification, "identification", { searches: 6, fetches: 4 }, IdentificationWire);
+    const found = await webResearch(IDENTIFY_SYSTEM, content, Identification, "identification", { searches: 5, fetches: 3 }, IdentificationWire, AbortSignal.timeout(WEB_IDENTIFY_BUDGET_MS));
     return fromWire(found as Record<string, unknown>);
   } catch (err) {
-    if (err instanceof Anthropic.APIError && err.status === 401) throw err;
-    console.error("identify with web search failed, reading photos only:", err);
+    if (err instanceof Anthropic.AuthenticationError) throw err;
+    console.error("identify with web search failed or ran out of time, reading photos only:", err);
     return readPhotos(content);
   }
 }
+
+/** How long the web-verified identification may take before falling back to the photos alone. */
+const WEB_IDENTIFY_BUDGET_MS = Number(process.env.IDENTIFY_BUDGET_MS) || 150_000;
 
 /** Fallback: the photos alone, one structured answer, no web search. */
 async function readPhotos(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<Identification> {
@@ -266,6 +269,7 @@ async function webResearch<T extends z.ZodType>(
   what: string,
   limits: { searches: number; fetches: number },
   restateAs: z.ZodType = schema,
+  signal?: AbortSignal,
 ): Promise<z.infer<T>> {
   const tools: Anthropic.Beta.BetaToolUnion[] = [
     { type: "web_search_20260209", name: "web_search", max_uses: limits.searches },
@@ -278,7 +282,7 @@ async function webResearch<T extends z.ZodType>(
     for (let i = 0; i < 5; i++) {
       // Streamed so long research turns don't hit HTTP timeouts.
       m = await client.beta.messages
-        .stream({ model, max_tokens: 32000, ...extra, output_config: { effort: "high" }, system, tools, messages })
+        .stream({ model, max_tokens: 32000, ...extra, output_config: { effort: "high" }, system, tools, messages }, { signal })
         .finalMessage();
       assertNotRefused(m);
       if (m.stop_reason !== "pause_turn") break;
@@ -292,6 +296,7 @@ async function webResearch<T extends z.ZodType>(
   const direct = schema.safeParse((() => { try { return extractJson(lastText); } catch { return null; } })());
   if (direct.success) return direct.data;
 
+  signal?.throwIfAborted();
   const structured = await resilient(({ model, extra }) =>
     client.beta.messages.parse({
       model,
@@ -304,7 +309,7 @@ async function webResearch<T extends z.ZodType>(
           content: `Convert this ${what} into the required structure. Keep every fact and source; do not invent anything that is not stated.\n\n${lastText}`,
         },
       ],
-    }),
+    }, { signal }),
   );
   assertNotRefused(structured);
   if (!structured.parsed_output) throw new AiError(`Could not read the ${what} result.`);

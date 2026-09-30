@@ -20,6 +20,13 @@ globalThis.fetch = async (url, init) => {
     }
     if (process.env.ALL_FAIL || (process.env.OPUS_FAIL && body.model === "claude-opus-5-5")) return new Response("upstream connect error.....", { status: 503, headers: { "content-type": "text/plain" } });
     const sys = typeof body.system === "string" ? body.system : "";
+    // IDENT_SLOW=<seconds>: the web-verified identification takes that long (cancellable, like the real API).
+    if (process.env.IDENT_SLOW && body.tools && sys.includes("identify coins")) {
+      await new Promise((resolve, reject) => {
+        const t = setTimeout(resolve, Number(process.env.IDENT_SLOW) * 1000);
+        init.signal?.addEventListener("abort", () => { clearTimeout(t); reject(Object.assign(new Error("aborted"), { name: "AbortError" })); });
+      });
+    }
     // Identification now searches the web; IDENT_WEB_FAIL=1 breaks that step to test the photos-only fallback.
     if (process.env.IDENT_WEB_FAIL && body.tools && sys.includes("identify coins")) return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "web search unavailable" } }), { status: 400, headers: { "content-type": "application/json" } });
     let text;

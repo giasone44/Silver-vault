@@ -21,6 +21,7 @@ import { LocalAiError, ollamaIdentify, ollamaStatus, warmUp } from "./ollama.js"
 import { ItemInput, type Item } from "./schemas.js";
 import { getSpot, spotFor, type SpotQuote } from "./spot.js";
 import { fineOz, queueRevalue, recheckMeltValuations, revalueStatus, scheduleMarketRefresh, valuateItem } from "./valuate.js";
+import { getJob, startJob } from "./jobs.js";
 import { queueResearch, reidentify, resumeResearch } from "./research.js";
 import { autoUpdates, currentVersion, latestVersion, scheduleUpdates, startUpdate } from "./updater.js";
 
@@ -75,21 +76,27 @@ function liveUnitValue(item: Item, quote: SpotQuote | null): { melt: number | nu
 
 const app = new Hono();
 
+/** A plain-English message and HTTP status for any failure. */
+function describeError(err: unknown): { error: string; status: number; details?: unknown } {
+  if (err instanceof z.ZodError) return { error: "Invalid request", status: 400, details: err.issues };
+  if (err instanceof AiError) return { error: err.message, status: 422 };
+  if (err instanceof LocalAiError) return { error: err.message, status: 503 };
+  if (err instanceof Anthropic.AuthenticationError) return { error: "Anthropic didn't accept the Claude key. Open Settings and paste it again.", status: 502 };
+  if (err instanceof Anthropic.RateLimitError) return { error: "Claude's rate limit was reached. Try again in a minute.", status: 429 };
+  if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500) {
+    return { error: "Claude is busy right now (Anthropic's servers). Please try again in a minute.", status: 503 };
+  }
+  if (err instanceof Anthropic.APIError) return { error: `AI service error: ${err.message}`, status: 502 };
+  if (err instanceof Anthropic.AnthropicError) {
+    return { error: "Claude isn't connected yet. Open Settings in Silver Vault and paste your Claude key.", status: 503 };
+  }
+  return { error: (err instanceof Error && err.message) || "Server error", status: 500 };
+}
+
 app.onError((err, c) => {
   console.error(err);
-  if (err instanceof z.ZodError) return c.json({ error: "Invalid request", details: err.issues }, 400);
-  if (err instanceof AiError) return c.json({ error: err.message }, 422);
-  if (err instanceof LocalAiError) return c.json({ error: err.message }, 503);
-  if (err instanceof Anthropic.AuthenticationError) return c.json({ error: "Server's Anthropic API key is invalid" }, 502);
-  if (err instanceof Anthropic.RateLimitError) return c.json({ error: "AI rate limit reached - try again shortly" }, 429);
-  if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500) {
-    return c.json({ error: "Claude is busy right now (Anthropic's servers). Please try again in a minute." }, 503);
-  }
-  if (err instanceof Anthropic.APIError) return c.json({ error: `AI service error: ${err.message}` }, 502);
-  if (err instanceof Anthropic.AnthropicError) {
-    return c.json({ error: "Claude isn't connected yet. Open Settings in Silver Vault and paste your Claude key." }, 503);
-  }
-  return c.json({ error: err.message || "Server error" }, 500);
+  const { error, status, details } = describeError(err);
+  return c.json({ error, details }, status as 400);
 });
 
 app.use("/api/*", cors());
@@ -131,15 +138,25 @@ app.get("/api/spot/history", (c) => {
   return c.json(db.spotHistory(metal, new Date(Date.now() - hours * 3600_000).toISOString()));
 });
 
+// Identifying runs as a background job: start it, then poll /api/jobs/:id.
 app.post("/api/identify", async (c) => {
   const body = z.object({ obverse: Photo, reverse: Photo.nullish(), extras: Photo.array().max(4).nullish() }).parse(await c.req.json());
   const reverse = body.reverse ?? null;
-  const ident =
-    config.aiProvider === "claude" ? await identify(body.obverse, reverse, body.extras ?? []) : await ollamaIdentify(body.obverse, reverse);
-  // Put the maker under its standard name ("Englehard" -> "Engelhard").
-  const maker = matchMaker(ident.mint, ident.name, ident.search_query);
-  if (maker) ident.mint = maker.name;
-  return c.json(ident);
+  const job = startJob(async () => {
+    const ident =
+      config.aiProvider === "claude" ? await identify(body.obverse, reverse, body.extras ?? []) : await ollamaIdentify(body.obverse, reverse);
+    // Put the maker under its standard name ("Englehard" -> "Engelhard").
+    const maker = matchMaker(ident.mint, ident.name, ident.search_query);
+    if (maker) ident.mint = maker.name;
+    return ident;
+  }, (err) => describeError(err).error);
+  return c.json({ job }, 202);
+});
+
+app.get("/api/jobs/:id", (c) => {
+  const job = getJob(c.req.param("id"));
+  if (!job) return c.json({ error: "That task was lost, probably because Silver Vault restarted. Please try again." }, 404);
+  return c.json({ status: job.status, result: job.result ?? null, error: job.error ?? null });
 });
 
 app.get("/api/makers", (c) => c.json(MAKERS));
@@ -248,7 +265,11 @@ app.post("/api/items/:id/research", (c) => {
   return c.json(db.getItem(id));
 });
 
-app.post("/api/items/:id/reidentify", async (c) => c.json(await reidentify(c.req.param("id"))));
+app.post("/api/items/:id/reidentify", (c) => {
+  const id = c.req.param("id");
+  if (!db.getItem(id)) return c.json({ error: "Not found" }, 404);
+  return c.json({ job: startJob(() => reidentify(id), (err) => describeError(err).error) }, 202);
+});
 
 app.get("/api/version", async (c) => {
   const current = currentVersion();

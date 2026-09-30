@@ -84,7 +84,7 @@ export default function AddItem() {
           {busy === "identify" ? (
             <Working
               title="Examining"
-              detail="Reading the piece and any certificate, then confirming it on the web. Up to a minute or two."
+              detail="Reading the piece and any certificate, then confirming it on the web. Usually 1–3 minutes; you can leave this screen open."
               timer
             />
           ) : (
