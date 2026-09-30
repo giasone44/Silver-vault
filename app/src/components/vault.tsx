@@ -105,6 +105,33 @@ function DoorFace({ size }: { size: number }) {
   );
 }
 
+/** One slice of the door's thickness. Stacked slices form its heavy stepped steel edge. */
+function DoorSlice({ size, r, fill, groove }: { size: number; r: number; fill: string; groove?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 1000 1000">
+      <Circle cx={C} cy={C} r={r} fill={fill} stroke={groove ? "#1A1C20" : fill} strokeWidth={groove ? 6 : 0} />
+    </Svg>
+  );
+}
+
+// The door's depth, front to back: a full-width armour plate, then a narrower
+// stepped plug carrying three rows of locking bolts, like a Mosler or Diebold door.
+const THICKNESS = 0.2; // of the door's diameter
+const SLICES = 26;
+const slice = (i: number) => {
+  const f = i / (SLICES - 1);
+  const plate = f < 0.38;
+  const tone = Math.round(150 - f * 70); // brighter at the front, shadowed toward the back
+  const hex = (n: number) => n.toString(16).padStart(2, "0");
+  return {
+    f,
+    r: plate ? 424 : f < 0.42 ? 404 : 392,
+    fill: `#${hex(tone)}${hex(tone + 5)}${hex(tone + 12)}`,
+    groove: plate ? i % 4 === 3 : i % 3 === 0,
+  };
+};
+const BOLT_ROWS = [0.52, 0.68, 0.84];
+
 /** The spoked handle wheel, drawn on its own so it can turn. */
 export function VaultWheel({ size }: { size: number }) {
   const id = useSvgId("wheel");
@@ -124,6 +151,17 @@ export function VaultWheel({ size }: { size: number }) {
         SV
       </SvgText>
     </Svg>
+  );
+}
+
+/** One depth layer of the door, turning about the hinge on the right edge. */
+function DoorLayer({ depth, rotateY, children }: { depth: number; rotateY: Animated.AnimatedInterpolation<string>; children: ReactNode }) {
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { transformOrigin: ["100%", "50%", depth], transform: [{ perspective: 1400 }, { rotateY }] }]}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -167,10 +205,9 @@ export function VaultEntrance() {
           Animated.delay(250),
           t(wheel, 950),
           t(bolts, 260, Easing.in(Easing.quad)),
-          Animated.parallel([
-            t(swing, 1000, Easing.out(Easing.cubic)),
-            Animated.sequence([Animated.delay(550), t(leave, 550, Easing.in(Easing.quad))]),
-          ]),
+          t(swing, 1300, Easing.out(Easing.cubic)),
+          Animated.delay(500), // hold on the open door
+          t(leave, 550, Easing.in(Easing.quad)),
         ]).start(finish);
         setTimeout(() => !cancelled && haptic.press(), 250 + 950 + 200); // the bolts' clunk
       });
@@ -184,8 +221,9 @@ export function VaultEntrance() {
 
   const doorSize = size * 0.98; // the door's own square; its bolts reach into the frame
   const rotate = wheel.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-300deg"] });
-  const boltScale = bolts.interpolate({ inputRange: [0, 1], outputRange: [1, 0.86] });
-  const rotateY = swing.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-112deg"] });
+  const boltScale = bolts.interpolate({ inputRange: [0, 1], outputRange: [1, 0.93] });
+  const rotateY = swing.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-58deg"] });
+  const shift = swing.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.14] });
   const opacity = leave.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   const scale = leave.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] });
 
@@ -193,33 +231,36 @@ export function VaultEntrance() {
     <Animated.View style={[StyleSheet.absoluteFill, styles.wall, { opacity }]}>
       <Pressable style={styles.fill} onPress={skip} accessibilityRole="button" accessibilityLabel="Open the vault">
         <Animated.Text style={[styles.title, { opacity: bolts.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }]}>SILVER VAULT</Animated.Text>
-        <Animated.View style={{ width: size, height: size, transform: [{ scale }] }}>
+        <Animated.View style={{ width: size, height: size, transform: [{ translateX: shift }, { scale }] }}>
           <View style={StyleSheet.absoluteFill}>
             <DoorFrame size={size} />
           </View>
-          <Animated.View
-            style={[
-              styles.door,
-              {
-                width: doorSize,
-                height: doorSize,
-                left: (size - doorSize) / 2,
-                top: (size - doorSize) / 2,
-                transformOrigin: "100% 50%",
-                transform: [{ perspective: 1400 }, { rotateY }],
-              },
-            ]}
-          >
-            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boltScale }] }]}>
-              <DoorBolts size={doorSize} />
-            </Animated.View>
-            <View style={StyleSheet.absoluteFill}>
+          <View style={[styles.door, { width: doorSize, height: doorSize, left: (size - doorSize) / 2, top: (size - doorSize) / 2 }]}>
+            {/* Back to front. Each layer turns about the hinge from its own depth, so the open door shows its thickness. */}
+            {Array.from({ length: SLICES }, (_, i) => SLICES - 1 - i).map((i) => {
+              const sl = slice(i);
+              return (
+                <DoorLayer key={`s${i}`} depth={sl.f * THICKNESS * doorSize} rotateY={rotateY}>
+                  <DoorSlice size={doorSize} r={sl.r} fill={sl.fill} groove={sl.groove} />
+                </DoorLayer>
+              );
+            })}
+            {BOLT_ROWS.flatMap((row) => [0, 1, 2].map((k) => row + (k - 1) * 0.012)).reverse().map((f) => (
+              <DoorLayer key={`b${f}`} depth={f * THICKNESS * doorSize} rotateY={rotateY}>
+                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ scale: boltScale }] }]}>
+                  <DoorBolts size={doorSize} />
+                </Animated.View>
+              </DoorLayer>
+            ))}
+            <DoorLayer depth={0} rotateY={rotateY}>
               <DoorFace size={doorSize} />
-            </View>
-            <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]}>
-              <VaultWheel size={doorSize} />
-            </Animated.View>
-          </Animated.View>
+            </DoorLayer>
+            <DoorLayer depth={-2} rotateY={rotateY}>
+              <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]}>
+                <VaultWheel size={doorSize} />
+              </Animated.View>
+            </DoorLayer>
+          </View>
         </Animated.View>
         <Text style={styles.hint}>Tap to enter</Text>
       </Pressable>
@@ -258,7 +299,7 @@ export function VaultRing({ size, band, children }: { size: number; band: number
 const styles = StyleSheet.create({
   wall: { backgroundColor: "#0A0A0C", zIndex: 1000 },
   fill: { flex: 1, alignItems: "center", justifyContent: "center" },
-  door: { position: "absolute", backfaceVisibility: "hidden" },
+  door: { position: "absolute" },
   title: { fontFamily: fonts.engravedBold, color: colors.gold, fontSize: 18, letterSpacing: 8, marginBottom: 28 },
   hint: { position: "absolute", bottom: 48, fontFamily: fonts.engraved, color: colors.muted, fontSize: 10, letterSpacing: 3, textTransform: "uppercase" },
 });
