@@ -7,7 +7,7 @@ import { CoinFrame } from "./watch";
 
 type Side = "obverse" | "reverse";
 
-function choose(onPick: (source: "camera" | "library") => void) {
+export function choosePhotoSource(onPick: (source: "camera" | "library") => void) {
   if (Platform.OS === "web") return onPick("library");
   if (Platform.OS === "ios") {
     ActionSheetIOS.showActionSheetWithOptions(
@@ -31,7 +31,7 @@ export function PhotoPair({ photos, existing, onChange, size = 150 }: {
   size?: number;
 }) {
   const pick = (side: Side) =>
-    choose(async (source) => {
+    choosePhotoSource(async (source) => {
       try {
         const p = await capturePhoto(source);
         if (p) {

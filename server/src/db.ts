@@ -35,7 +35,7 @@ db.exec(`
 `);
 
 // Columns added after the first release.
-for (const col of ["dossier TEXT", "research_status TEXT", "research_error TEXT"]) {
+for (const col of ["dossier TEXT", "research_status TEXT", "research_error TEXT", "extra_photos TEXT"]) {
   try {
     db.exec(`ALTER TABLE items ADD COLUMN ${col}`);
   } catch {
@@ -48,6 +48,7 @@ type Row = {
   data: string;
   obverse_photo: string | null;
   reverse_photo: string | null;
+  extra_photos: string | null;
   valuation: string | null;
   dossier: string | null;
   research_status: string | null;
@@ -62,6 +63,7 @@ function toItem(row: Row): Item {
     id: row.id,
     obverse_photo: row.obverse_photo,
     reverse_photo: row.reverse_photo,
+    extra_photos: row.extra_photos ? (JSON.parse(row.extra_photos) as string[]) : [],
     valuation: row.valuation ? (JSON.parse(row.valuation) as Valuation) : null,
     dossier: row.dossier ? (JSON.parse(row.dossier) as Dossier) : null,
     research_status: (row.research_status as ResearchStatus | null) ?? null,
@@ -100,6 +102,10 @@ export function updateItem(id: string, input: ItemInput): Item | null {
     id,
   );
   return getItem(id);
+}
+
+export function setExtraPhotos(id: string, files: string[]) {
+  db.prepare("UPDATE items SET extra_photos = ? WHERE id = ?").run(JSON.stringify(files), id);
 }
 
 export function setPhotos(id: string, obverse: string | null, reverse: string | null) {

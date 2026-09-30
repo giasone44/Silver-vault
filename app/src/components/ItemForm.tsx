@@ -40,7 +40,17 @@ export function inputFromIdentification(id: Identification, base: ItemInput = em
     condition_notes: id.condition_notes,
     search_query: id.search_query,
     specs: id,
+    // From a receipt, unless already entered.
+    purchase_price_per_unit: base.purchase_price_per_unit ?? receiptNumber(id.purchase_price_per_unit),
+    purchase_date: base.purchase_date ?? id.purchase_date ?? null,
+    purchase_source: base.purchase_source ?? id.purchase_source ?? null,
+    quantity: base.quantity > 1 ? base.quantity : Math.max(1, Math.round(receiptNumber(id.quantity) ?? 1)),
   };
+}
+
+function receiptNumber(s: string | null | undefined): number | null {
+  const n = s ? parseFloat(s.replace(/[^0-9.]/g, "")) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function blankIdentification(v: ItemInput): Identification {

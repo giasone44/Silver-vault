@@ -118,6 +118,10 @@ function toIdentification(r: LocalReading): Identification {
     search_query: r.search_query,
     confidence: r.confidence,
     notes_for_user: r.unclear,
+    purchase_price_per_unit: null,
+    purchase_date: null,
+    purchase_source: null,
+    quantity: null,
   };
 }
 

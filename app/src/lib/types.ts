@@ -36,6 +36,11 @@ export type Identification = {
   search_query: string;
   confidence: number;
   notes_for_user: string | null;
+  /** From a receipt in the extra photos. */
+  purchase_price_per_unit?: string | null;
+  purchase_date?: string | null;
+  purchase_source?: string | null;
+  quantity?: string | null;
 };
 
 export type Comp = {
@@ -128,6 +133,7 @@ export type ResearchStatus = "queued" | "running" | "done" | "failed";
 export type Item = ItemInput & {
   id: string;
   obverse_photo: string | null;
+  extra_photos?: string[];
   reverse_photo: string | null;
   valuation: Valuation | null;
   dossier: Dossier | null;

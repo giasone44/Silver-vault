@@ -24,8 +24,14 @@ await step("add: identify from photos", async () => {
   await p.getByText("＋", { exact: false }).first().click().catch(() => p.goto(BASE + "/add"));
   await p.goto(BASE + "/add"); await see("Photograph both faces");
   for (const label of ["+  Obverse", "+  Reverse"]) { const [fc] = await Promise.all([p.waitForEvent("filechooser"), p.getByText(label).click()]); await fc.setFiles(new URL("./coin-silver.png", import.meta.url).pathname); await p.waitForTimeout(800); }
+  const [fc] = await Promise.all([p.waitForEvent("filechooser"), p.getByLabel("Add extra photo").click()]);
+  await fc.setFiles(new URL("./coin-silver.png", import.meta.url).pathname); await p.waitForTimeout(800);
   await p.getByText("Identify piece").click();
   await see("1964 Kennedy Half Dollar", 30000);
+});
+await step("receipt in extra photos fills in price paid", async () => {
+  const v = await p.getByText("Paid per piece ($)").locator("xpath=following-sibling::input").inputValue();
+  if (v !== "31.5" && v !== "31.50") throw new Error(`price field shows "${v}"`);
 });
 await step("add: enter price paid and save", async () => {
   await p.getByText("Paid per piece ($)").locator("xpath=following-sibling::input").fill("25");
@@ -36,6 +42,10 @@ await step("research: dossier and market value appear", async () => {
   await see("Dossier", 40000);
   await see("first year of the series", 5000);
   await see("Trades near melt", 20000);
+});
+await step("extra photo saved with the piece", async () => {
+  const items = await (await fetch(BASE + "/api/items", { headers: { authorization: "Bearer t" } })).json();
+  if (items[0]?.extra_photos?.length !== 1) throw new Error(JSON.stringify(items[0]?.extra_photos));
 });
 await step("collection lists the piece with a value", async () => {
   await p.goto(BASE + "/"); await see("1964 Kennedy Half Dollar");

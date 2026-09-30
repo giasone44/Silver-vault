@@ -83,7 +83,14 @@ Rules:
 - For raw coins, give an honest estimated grade range and describe visible condition issues.
 - Leave a field null rather than guessing when it cannot be determined, and say what photo would resolve it.
 - Bars and rounds: identify the refiner or private mint from its name, logo and hallmark style, and record the serial number (in condition_notes) and style (poured, extruded, struck) - these drive collector value. Well-known makers include: ${MAKERS.map((m) => m.name).join(", ")}.
-- search_query should be what a dealer would type into eBay's sold listings to find this exact item (include year, mint mark, grade/slab, refiner and style where relevant).`;
+- Read EVERYTHING in the photos, not just the piece: certificates of authenticity, capsule and box labels, cards, receipts and slab inserts. They often state the maker, product name, fineness, weight, mintage and edition number (for example "Anonymous Mint · Bitcoin Crypto Icon · 1477 of 3000"). Put a limited mintage in mintage ("3,000 (limited edition)") and the piece's own edition or serial number in condition_notes. Ignore unrelated objects at the edges of the photo.
+- Supporting photos may include a receipt or invoice: read the price paid per piece, date and seller into purchase_price_per_unit, purchase_date and purchase_source. If the photos or receipt show several identical pieces (a sealed tube, a monster box, a quantity on the invoice), give the count in quantity.
+- search_query should be what a dealer would type into eBay's sold listings to find this exact item (include year, mint mark, grade/slab, refiner, product name and style where relevant).
+
+Then VERIFY with the web before answering. Search for the piece using its legends, design, maker and any certificate text. Confirm the exact identity, the maker, series or program, year, mintage and specifications from the maker's own page, major dealers (APMEX, JM Bullion, SD Bullion, Provident), Numista, PCGS or NGC. Correct your reading if the sources show it was wrong, fill in anything the photos alone could not tell you, and mention what you confirmed in notes_for_user. Keep searching until the identity is confirmed or clearly impossible to confirm.
+
+When finished, output ONLY a single JSON object (no markdown fences) with exactly these keys, using null for anything unknown:
+${Object.entries(Identification.shape).map(([k, v]) => `${k}${v.description ? `: ${v.description}` : ""}`).join("\n")}`;
 
 // Claude's structured output allows at most 16 optional (nullable) fields per
 // schema, and Identification has 22. Ask for text fields as plain strings
@@ -91,6 +98,7 @@ Rules:
 const TEXT_FIELDS = [
   "country", "mint", "mint_mark", "year", "denomination", "series", "catalog_number", "mintage", "designer", "edge",
   "certification_grade", "cert_number", "estimated_grade", "condition_notes", "variety_or_error", "notes_for_user",
+  "purchase_price_per_unit", "purchase_date", "purchase_source", "quantity",
 ] as const;
 export const IdentificationWire = Identification.extend(
   Object.fromEntries(TEXT_FIELDS.map((k) => [k, zod.string().describe(`${Identification.shape[k].description ?? k}. Empty string if unknown.`)])),
@@ -105,7 +113,7 @@ function fromWire(raw: Record<string, unknown>): Identification {
   return Identification.parse(out);
 }
 
-export async function identify(obverse: Photo, reverse: Photo | null): Promise<Identification> {
+export async function identify(obverse: Photo, reverse: Photo | null, extras: Photo[] = []): Promise<Identification> {
   const content: Anthropic.Beta.BetaContentBlockParam[] = [
     { type: "text", text: "Photo 1 - obverse (front):" },
     { type: "image", source: { type: "base64", media_type: obverse.mediaType, data: obverse.base64 } },
@@ -116,8 +124,29 @@ export async function identify(obverse: Photo, reverse: Photo | null): Promise<I
       { type: "image", source: { type: "base64", media_type: reverse.mediaType, data: reverse.base64 } },
     );
   }
-  content.push({ type: "text", text: "Identify this item and catalog its full specifications." });
+  extras.forEach((p, i) =>
+    content.push(
+      { type: "text", text: `Supporting photo ${i + 1} - a receipt, certificate, packaging, sealed tube or box, or printed information about this piece:` },
+      { type: "image", source: { type: "base64", media_type: p.mediaType, data: p.base64 } },
+    ),
+  );
+  content.push({
+    type: "text",
+    text: "Identify this item and catalog its full specifications. Read any certificate or label in the photos, then confirm the identification on the web.",
+  });
+  try {
+    // Photos plus web search: read the piece, then confirm it against the maker and dealers.
+    const found = await webResearch(IDENTIFY_SYSTEM, content, Identification, "identification", { searches: 6, fetches: 4 }, IdentificationWire);
+    return fromWire(found as Record<string, unknown>);
+  } catch (err) {
+    if (err instanceof Anthropic.APIError && err.status === 401) throw err;
+    console.error("identify with web search failed, reading photos only:", err);
+    return readPhotos(content);
+  }
+}
 
+/** Fallback: the photos alone, one structured answer, no web search. */
+async function readPhotos(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<Identification> {
   const msg = await resilient(({ model, extra }) =>
     // create() rather than parse(): the reply is checked by fromWire, which also
     // accepts null for an unknown text field instead of rejecting the whole answer.
@@ -232,10 +261,11 @@ export async function researchMarket(
  */
 async function webResearch<T extends z.ZodType>(
   system: string,
-  prompt: string,
+  prompt: string | Anthropic.Beta.BetaContentBlockParam[],
   schema: T,
   what: string,
   limits: { searches: number; fetches: number },
+  restateAs: z.ZodType = schema,
 ): Promise<z.infer<T>> {
   const tools: Anthropic.Beta.BetaToolUnion[] = [
     { type: "web_search_20260209", name: "web_search", max_uses: limits.searches },
@@ -267,7 +297,7 @@ async function webResearch<T extends z.ZodType>(
       model,
       max_tokens: 16000,
       ...extra,
-      output_config: { effort: "low", format: betaZodOutputFormat(schema) },
+      output_config: { effort: "low", format: betaZodOutputFormat(restateAs) },
       messages: [
         {
           role: "user",

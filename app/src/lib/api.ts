@@ -52,22 +52,22 @@ export function createApi(s: Settings) {
     spotHistory: (metal: string, hours: number) =>
       call<{ minute: string; price: number }[]>(`/api/spot/history?metal=${metal}&hours=${hours}`),
     /** `small` sends the reduced copies, which the local AI reads far faster. */
-    identify: (obverse: Photo, reverse: Photo | null, small = false) => {
+    identify: (obverse: Photo, reverse: Photo | null, small = false, extras: Photo[] = []) => {
       const pick = (p: Photo | null) =>
         p ? { base64: small && p.aiBase64 ? p.aiBase64 : p.base64, mediaType: p.mediaType } : null;
       return call<Identification>(
         "/api/identify",
-        { method: "POST", body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse) }) },
+        { method: "POST", body: JSON.stringify({ obverse: pick(obverse), reverse: pick(reverse), extras: extras.map(upload) }) },
         200_000,
       );
     },
     warmup: () => call<{ ok: true }>("/api/warmup", { method: "POST" }),
     items: () => call<Item[]>("/api/items"),
     item: (id: string) => call<ItemDetail>(`/api/items/${id}`),
-    create: (item: ItemInput, obverse?: Photo | null, reverse?: Photo | null) =>
+    create: (item: ItemInput, obverse?: Photo | null, reverse?: Photo | null, extras: Photo[] = []) =>
       call<Item>("/api/items", {
         method: "POST",
-        body: JSON.stringify({ item, obverse: upload(obverse), reverse: upload(reverse) }),
+        body: JSON.stringify({ item, obverse: upload(obverse), reverse: upload(reverse), extras: extras.map(upload) }),
       }, 60_000),
     update: (id: string, item: ItemInput, obverse?: Photo | null, reverse?: Photo | null) =>
       call<Item>(`/api/items/${id}`, {

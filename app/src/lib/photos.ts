@@ -3,9 +3,9 @@ import * as ImagePicker from "expo-image-picker";
 import { Alert, Platform } from "react-native";
 import type { Photo } from "./types";
 
-/** Saved photo: sharp enough to zoom in on dates and mint marks later. */
-const SAVE_EDGE = 1280;
-/** Copy the AI reads. Vision models slow down steeply with image size; this is plenty for legends and dates. */
+/** Saved photo, also what Claude reads: the most detail it can use (1568 px), so small legends and certificates stay legible. */
+const SAVE_EDGE = 1568;
+/** Smaller copy for the free on-Mac AI, which slows down steeply with image size. */
 const AI_EDGE = 768;
 
 async function encode(asset: ImagePicker.ImagePickerAsset, edge: number, compress: number) {
@@ -20,7 +20,7 @@ async function encode(asset: ImagePicker.ImagePickerAsset, edge: number, compres
 }
 
 async function toPhoto(asset: ImagePicker.ImagePickerAsset): Promise<Photo> {
-  const [full, small] = await Promise.all([encode(asset, SAVE_EDGE, 0.85), encode(asset, AI_EDGE, 0.8)]);
+  const [full, small] = await Promise.all([encode(asset, SAVE_EDGE, 0.88), encode(asset, AI_EDGE, 0.8)]);
   return { uri: full.uri, base64: full.base64!, aiBase64: small.base64!, mediaType: "image/jpeg" };
 }
 

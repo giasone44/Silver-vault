@@ -31,14 +31,14 @@ const Photo = z.object({
   mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
 });
 const SaveBody = z
-  .object({ item: ItemInput, obverse: Photo.nullish(), reverse: Photo.nullish() })
+  .object({ item: ItemInput, obverse: Photo.nullish(), reverse: Photo.nullish(), extras: Photo.array().max(4).nullish() })
   .transform((b) => {
     // Record the maker under its standard name, however it was typed.
     const maker = matchMaker(b.item.mint, b.item.name);
     return maker ? { ...b, item: { ...b.item, mint: maker.name } } : b;
   });
 
-function savePhoto(itemId: string, side: "obverse" | "reverse", photo: z.infer<typeof Photo>): string {
+function savePhoto(itemId: string, side: "obverse" | "reverse" | "extra", photo: z.infer<typeof Photo>): string {
   const ext = photo.mediaType.split("/")[1] === "jpeg" ? "jpg" : photo.mediaType.split("/")[1];
   const file = `${itemId}-${side}-${randomUUID().slice(0, 8)}.${ext}`;
   fs.writeFileSync(path.join(photosDir, file), Buffer.from(photo.base64, "base64"));
@@ -132,9 +132,10 @@ app.get("/api/spot/history", (c) => {
 });
 
 app.post("/api/identify", async (c) => {
-  const body = z.object({ obverse: Photo, reverse: Photo.nullish() }).parse(await c.req.json());
+  const body = z.object({ obverse: Photo, reverse: Photo.nullish(), extras: Photo.array().max(4).nullish() }).parse(await c.req.json());
   const reverse = body.reverse ?? null;
-  const ident = config.aiProvider === "claude" ? await identify(body.obverse, reverse) : await ollamaIdentify(body.obverse, reverse);
+  const ident =
+    config.aiProvider === "claude" ? await identify(body.obverse, reverse, body.extras ?? []) : await ollamaIdentify(body.obverse, reverse);
   // Put the maker under its standard name ("Englehard" -> "Engelhard").
   const maker = matchMaker(ident.mint, ident.name, ident.search_query);
   if (maker) ident.mint = maker.name;
@@ -196,6 +197,7 @@ app.post("/api/items", async (c) => {
     body.obverse ? savePhoto(item.id, "obverse", body.obverse) : null,
     body.reverse ? savePhoto(item.id, "reverse", body.reverse) : null,
   );
+  if (body.extras?.length) db.setExtraPhotos(item.id, body.extras.map((p) => savePhoto(item.id, "extra", p)));
   // Research the new piece in the background: reference file, then market value.
   queueResearch(item.id);
   return c.json(db.getItem(item.id), 201);
@@ -219,6 +221,12 @@ app.put("/api/items/:id", async (c) => {
     body.obverse ? savePhoto(existing.id, "obverse", body.obverse) : null,
     body.reverse ? savePhoto(existing.id, "reverse", body.reverse) : null,
   );
+  // Extra photos sent with an amendment are added to the ones already saved (up to 4 kept).
+  if (body.extras?.length) {
+    const all = [...existing.extra_photos, ...body.extras.map((p) => savePhoto(existing.id, "extra", p))];
+    all.slice(0, -4).forEach(removePhoto);
+    db.setExtraPhotos(existing.id, all.slice(-4));
+  }
   return c.json(db.getItem(existing.id));
 });
 
@@ -227,6 +235,7 @@ app.delete("/api/items/:id", (c) => {
   if (!item) return c.json({ error: "Not found" }, 404);
   removePhoto(item.obverse_photo);
   removePhoto(item.reverse_photo);
+  item.extra_photos.forEach(removePhoto);
   return c.json({ ok: true });
 });
 

@@ -66,7 +66,7 @@ async function research(id: string) {
 }
 
 const inputOf = (item: Item): ItemInput => {
-  const { id, obverse_photo, reverse_photo, valuation, dossier, research_status, research_error, created_at, updated_at, ...input } = item;
+  const { id, obverse_photo, reverse_photo, extra_photos, valuation, dossier, research_status, research_error, created_at, updated_at, ...input } = item;
   return input;
 };
 
@@ -137,7 +137,9 @@ export async function reidentify(id: string): Promise<Item> {
   const reverse = item.obverse_photo && item.reverse_photo ? readPhoto(item.reverse_photo) : null;
 
   const ident: Identification =
-    config.aiProvider === "claude" ? await identify(obverse, reverse) : await ollamaIdentify(obverse, reverse);
+    config.aiProvider === "claude"
+      ? await identify(obverse, reverse, item.extra_photos.map(readPhoto).filter((p): p is NonNullable<typeof p> => p != null))
+      : await ollamaIdentify(obverse, reverse);
   const maker = matchMaker(ident.mint, ident.name, ident.search_query);
   if (maker) ident.mint = maker.name;
 

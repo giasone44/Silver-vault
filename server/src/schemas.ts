@@ -41,6 +41,11 @@ export const Identification = z.object({
     .string()
     .nullable()
     .describe("Anything uncertain and what photo would resolve it, e.g. 'mint mark not visible - photograph below the date'"),
+  // Read from a receipt or invoice in the extra photos, when there is one.
+  purchase_price_per_unit: z.string().nullable().default(null).describe("From a receipt: price paid for ONE piece in USD, digits only (e.g. 89.50)"),
+  purchase_date: z.string().nullable().default(null).describe("From a receipt: purchase date as YYYY-MM-DD"),
+  purchase_source: z.string().nullable().default(null).describe("From a receipt: seller or dealer name"),
+  quantity: z.string().nullable().default(null).describe("How many identical pieces the photos or receipt show (digits only), e.g. a sealed tube of 20"),
 });
 export type Identification = z.infer<typeof Identification>;
 
@@ -151,6 +156,8 @@ export type ItemInput = z.infer<typeof ItemInput>;
 export type Item = ItemInput & {
   id: string;
   obverse_photo: string | null;
+  /** Receipts, certificates, packaging and other supporting photos. */
+  extra_photos: string[];
   reverse_photo: string | null;
   valuation: Valuation | null;
   dossier: Dossier | null;

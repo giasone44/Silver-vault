@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { CatalogPicker } from "../components/CatalogPicker";
 import { emptyInput, inputFromIdentification, inputWithCatalog, ItemForm, useItemDraft } from "../components/ItemForm";
 import { Reveal } from "../components/motion";
+import { ExtraPhotos } from "../components/ExtraPhotos";
 import { PhotoPair } from "../components/PhotoPair";
 import { Button } from "../components/ui";
 import { Subdial, Working } from "../components/watch";
@@ -15,6 +16,7 @@ import type { Health, Identification, Photo } from "../lib/types";
 export default function AddItem() {
   const api = useApi();
   const [photos, setPhotos] = useState<{ obverse: Photo | null; reverse: Photo | null }>({ obverse: null, reverse: null });
+  const [extras, setExtras] = useState<Photo[]>([]);
   const [ident, setIdent] = useState<Identification | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState<"identify" | "save" | null>(null);
@@ -35,7 +37,7 @@ export default function AddItem() {
     setBusy("identify");
     setError(null);
     try {
-      const result = await api.identify(photos.obverse, photos.reverse, local);
+      const result = await api.identify(photos.obverse, photos.reverse, local, extras);
       setIdent(result);
       form.reset(inputFromIdentification(result, form.value()));
       setShowForm(true);
@@ -54,7 +56,7 @@ export default function AddItem() {
     setBusy("save");
     setError(null);
     try {
-      const item = await api.create(input, photos.obverse, photos.reverse);
+      const item = await api.create(input, photos.obverse, photos.reverse, extras);
       haptic.success();
       router.replace({ pathname: "/item/[id]", params: { id: item.id } });
     } catch (e) {
@@ -76,12 +78,13 @@ export default function AddItem() {
         )}
         <Step numeral="I" title="Photograph both faces" note="Fill the frame, soft even light, no glare. For slabs, keep the label legible." />
         <PhotoPair photos={photos} onChange={(side, p) => setPhotos((s) => ({ ...s, [side]: p }))} />
+        <ExtraPhotos photos={extras} onChange={setExtras} />
 
         <View style={{ marginTop: 24 }}>
           {busy === "identify" ? (
             <Working
               title="Examining"
-              detail="Reading legends, dates and mint marks…"
+              detail="Reading the piece and any certificate, then confirming it on the web. Up to a minute or two."
               timer
             />
           ) : (

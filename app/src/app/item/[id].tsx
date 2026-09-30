@@ -5,6 +5,7 @@ import { Alert, Linking, Platform, ScrollView, Share, StyleSheet, Text, useWindo
 import { AnimatedNumber, PressableScale, Reveal } from "../../components/motion";
 import { Button, Certificate, Icon, PaperRow, Register, RegisterRow, Row, SectionTitle } from "../../components/ui";
 import { DossierPanel } from "../../components/Dossier";
+import { SavedExtras } from "../../components/ExtraPhotos";
 import { MakerPanel, MintageRecord, ResearchLinks } from "../../components/Reference";
 import { RateRecord, ValueScale } from "../../components/ValueScale";
 import { BalanceWheel, CoinFrame, Working } from "../../components/watch";
@@ -164,6 +165,7 @@ export default function ItemScreen() {
           {hasBack && <Icon name="flip" size={14} color={colors.muted} />}
           <Text style={[type.label, { fontSize: 9 }]}>{hasBack ? `${side} · tap to turn` : side}</Text>
         </View>
+        <SavedExtras urls={(item.extra_photos ?? []).map((f) => api.photoUrl(f)).filter((u): u is string => u != null)} />
       </Reveal>
 
       <Reveal delay={80} style={{ alignItems: "center", marginTop: 20, gap: 8 }}>
