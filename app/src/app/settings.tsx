@@ -22,7 +22,7 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [aiKey, setAiKey] = useState("");
 
-  const [pairing, setPairing] = useState<{ url: string; svg: string } | null>(null);
+  const [pairing, setPairing] = useState<{ url: string; svg: string; away: { url: string; svg: string } | null } | null>(null);
   const [version, setVersion] = useState<Awaited<ReturnType<ReturnType<typeof createApi>["version"]>> | null>(null);
   const [diag, setDiag] = useState<Awaited<ReturnType<ReturnType<typeof createApi>["diagnostics"]>> | null>(null);
 
@@ -130,8 +130,23 @@ export default function SettingsScreen() {
               <SvgXml xml={pairing.svg} width={200} height={200} />
             </View>
             <Text style={[type.bodyMuted, { textAlign: "center" }]}>
-              On your iPhone, open the Camera and point it at this code, then tap the link. Once it opens, tap Share → Add to Home Screen.
+              At home, on the same Wi-Fi: open the iPhone Camera, point it at this code and tap the link. Then tap Share → Add to Home Screen.
             </Text>
+            {pairing.away ? (
+              <>
+                <Text style={[type.labelGold, { marginTop: 18 }]}>Away from home</Text>
+                <View style={styles.qr}>
+                  <SvgXml xml={pairing.away.svg} width={200} height={200} />
+                </View>
+                <Text style={[type.bodyMuted, { textAlign: "center" }]}>
+                  Works anywhere through Tailscale while this Mac is on. Scan it, then Share → Add to Home Screen. This icon works at home too.
+                </Text>
+              </>
+            ) : (
+              <Text style={[type.italic, { textAlign: "center", fontSize: 14, marginTop: 8 }]}>
+                To use Silver Vault away from home, install the free Tailscale app on this Mac and your iPhone, sign in to the same account on both, and an Away from home code appears here.
+              </Text>
+            )}
           </View>
         </>
       )}

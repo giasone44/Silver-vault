@@ -103,7 +103,7 @@ export function createApi(s: Settings) {
     research: (id: string) => call<Item>(`/api/items/${id}/research`, { method: "POST" }),
     /** Reads the saved photos again from scratch, then re-researches. */
     reidentify: (id: string) => runJob<Item>(`/api/items/${id}/reidentify`, { method: "POST" }),
-    pairing: () => call<{ url: string; svg: string }>("/api/pairing"),
+    pairing: () => call<{ url: string; svg: string; away: { url: string; svg: string } | null }>("/api/pairing"),
     version: () =>
       call<{ current: string | null; latest: string | null; update_available: boolean; auto_updates: boolean; repo_private: boolean }>(
         "/api/version",

@@ -293,11 +293,17 @@ app.post("/api/update", (c) => c.json({ started: startUpdate() }));
 
 /** Link and QR code that connect a phone (shown in Settings on the Mac). */
 app.get("/api/pairing", async (c) => {
-  const host = reachableAddresses().lan[0];
-  if (!host) return c.json({ error: "This Mac isn't connected to a network." }, 503);
-  const url = `http://${host}:${config.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
-  const svg = await QRCode.toString(url, { type: "svg", margin: 2, color: { dark: "#101115", light: "#EFE7D5" } });
-  return c.json({ url, svg });
+  const { lan, tailscale } = reachableAddresses();
+  const code = async (host: string) => {
+    const url = `http://${host}:${config.port}/${config.appToken ? `?t=${encodeURIComponent(config.appToken)}` : ""}`;
+    const svg = await QRCode.toString(url, { type: "svg", margin: 2, color: { dark: "#101115", light: "#EFE7D5" } });
+    return { url, svg };
+  };
+  if (!lan[0] && !tailscale[0]) return c.json({ error: "This Mac isn't connected to a network." }, 503);
+  // Home Wi-Fi code, plus an "away from home" code when Tailscale is installed.
+  const home = lan[0] ? await code(lan[0]) : null;
+  const away = tailscale[0] ? await code(tailscale[0]) : null;
+  return c.json({ ...(home ?? away!), away });
 });
 
 app.post("/api/revalue", async (c) => {
